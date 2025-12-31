@@ -102,7 +102,6 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment:
       name: production
-      url: https://camarasserver-camserver-rlwh8e-a02680-31-97-64-187.traefik.me
     
     steps:
       - name: 📥 Checkout código
