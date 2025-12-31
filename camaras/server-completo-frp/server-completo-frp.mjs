@@ -31,7 +31,7 @@ console.log('📊 Dashboard disponible en http://localhost:7500 (admin/admin123)
 // === 2. EXPRESS APP PARA MANEJO DE CÁMARAS ===
 app.use(express.json());
 app.use(cors());
-app.use('/streams', express.static('streams'));
+app.use('/streams', express.static('streamsss'));
 
 const cameras = {};
 
