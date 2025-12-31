@@ -11,7 +11,7 @@ Este es un servidor completo para la gestión y streaming de cámaras IP utiliza
 - 🌐 API REST para gestión de cámaras
 - 🔄 Persistencia de configuración
 
-## 🏗️ Arquitectura
+## 🏗️ Arquitecturaaaaa
 
 ```
 ┌─────────────────────────────────────────────────────┐
