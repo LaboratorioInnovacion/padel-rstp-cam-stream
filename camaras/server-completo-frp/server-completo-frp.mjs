@@ -8,7 +8,7 @@ import { uploadToDrive } from './utils/uploadToDrive.js';
 
 
 const app = express();
-const PORT = 3000;
+const PORT = 3100;
 const CAM_FILE = './cameras.json';
 // === 0. CONFIGURACIÓN INICIAL ===
 // Otorgar permisos de ejecución al archivo frps

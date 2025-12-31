@@ -1,6 +1,7 @@
 # ================================================================
 # Docker Compose - Servidor FRP Completo
 # ================================================================
+# Nota: Cloudflared se ejecuta nativamente en el host, no en Docker
 version: "3.9"
 
 services:
@@ -14,7 +15,7 @@ services:
       target: production
     container_name: camaras-frp-server
     ports:
-      - "3000:3000"    # API Express
+      - "3100:3100"    # API Express
       - "7000:7000"    # FRP Control Port
       - "7500:7500"    # FRP Dashboard
       - "18554:18554"  # RTSP Public Port
@@ -31,13 +32,13 @@ services:
       - ./config/token.json:/app/config/token.json
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3100
       - TZ=America/Argentina/Buenos_Aires
     restart: unless-stopped
     networks:
       - camaras-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -48,7 +49,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-networks:
+  networks:
   camaras-network:
     driver: bridge
 

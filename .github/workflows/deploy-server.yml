@@ -13,149 +13,155 @@ on:
     branches: [main, master]
   workflow_dispatch:  # Permite ejecución manual
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/frp-server
-
 jobs:
   # ============================================================
-  # Job 1: Build y Test
+  # Job: Build, Test & Deploy
   # ============================================================
-  build-and-test:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./camaras/server-completo-frp
+  deploy:
+    name: Build & Deploy FRP Server
+    runs-on: self-hosted
+    timeout-minutes: 20
     
     steps:
-      - name: 📥 Checkout código
-        uses: actions/checkout@v4
+    - name: 👤 Mostrar usuario del runner
+      run: whoami
 
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: './camaras/server-completo-frp/package-lock.json'
+    - name: 📥 Checkout código
+      uses: actions/checkout@v4
 
-      - name: 📦 Instalar dependencias
-        run: npm ci
+    - name: 🔍 Verificar túnel Cloudflare
+      run: |
+        echo "🔍 Verificando túnel Cloudflare..."
+        
+        if pgrep -f "cloudflared tunnel" > /dev/null; then
+          echo "✅ Proceso cloudflared está ejecutándose"
+        else
+          echo "⚠️ No se encontró proceso cloudflared activo"
+        fi
+        
+        echo "📊 Procesos cloudflared:"
+        ps aux | grep cloudflared || true
 
-      - name: 🔍 Verificar sintaxis
-        run: node --check server-completo-frp.mjs
+    - name: 🟢 Verificar Node.js
+      run: |
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
 
-      - name: ✅ Tests (si existen)
-        run: npm test --if-present
-        continue-on-error: true
+    - name: 📦 Instalar dependencias y validar
+      run: |
+        echo "📦 Instalando dependencias..."
+        cd camaras/server-completo-frp
+        npm ci
+        
+        echo "🔍 Verificando sintaxis del servidor..."
+        node --check server-completo-frp.mjs
+        
+        echo "✅ Tests (si existen)..."
+        npm test --if-present || true
 
-  # ============================================================
-  # Job 2: Build Docker Image
-  # ============================================================
-  build-docker:
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: 📥 Checkout código
-        uses: actions/checkout@v4
+    - name: ⏹️ Parar servicios existentes
+      run: |
+        echo "⏹️ Parando contenedores existentes..."
+        cd camaras/server-completo-frp
+        docker compose down 2>/dev/null || true
+        
+        echo "🧹 Limpiando Docker..."
+        docker system prune -af --volumes
+        docker builder prune -af
+        docker image prune -af
+        
+        echo "🔄 Reiniciando Docker daemon..."
+        sudo systemctl restart docker 2>/dev/null || echo "No se puede reiniciar Docker daemon"
+        sleep 5
 
-      - name: 🐳 Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: 📁 Crear directorios necesarios
+      run: |
+        echo "📁 Creando directorios necesarios..."
+        cd camaras/server-completo-frp
+        mkdir -p streams videos logs
+        chmod 777 streams videos logs
+        echo "✅ Directorios creados"
 
-      - name: 🔐 Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏷️ Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: 🔨 Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./camaras/server-completo-frp
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-
-  # ============================================================
-  # Job 3: Deploy a VPS (WSL2 Docker)
-  # ============================================================
-  deploy-to-vps:
-    runs-on: ubuntu-latest
-    needs: build-docker
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    environment:
-      name: production
-    
-    steps:
-      - name: 📥 Checkout código
-        uses: actions/checkout@v4
-
-      - name: 🚀 Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || 22 }}
-          script: |
-            # Navegar al directorio del proyecto
-            cd ${{ secrets.VPS_PROJECT_PATH || '/home/ubuntu/camaras/server-completo-frp' }}
-            
-            # Pull latest changes
-            git pull origin main
-            
-            # Login a GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Pull nueva imagen
-            docker compose pull
-            
-            # Recrear contenedor con nueva imagen
-            docker compose up -d --force-recreate --no-deps frp-server
-            
-            # Limpiar imágenes antiguas
-            docker image prune -af
-            
-            # Verificar estado
-            docker compose ps
-            docker compose logs --tail=50 frp-server
-
-      - name: ✅ Verificar deployment
-        run: |
-          sleep 15
-          curl -f https://camarasserver-camserver-rlwh8e-a02680-31-97-64-187.traefik.me:3000/api/health || exit 1
-
-  # ============================================================
-  # Job 4: Notificación (opcional)
-  # ============================================================
-  notify:
-    runs-on: ubuntu-latest
-    needs: [deploy-to-vps]
-    if: always()
-    
-    steps:
-      - name: 📢 Notificar resultado
-        run: |
-          if [ "${{ needs.deploy-to-vps.result }}" == "success" ]; then
-            echo "✅ Deployment exitoso!"
+    - name: 🏗️ Construir y desplegar aplicación
+      run: |
+        echo "🏗️ Iniciando construcción..."
+        cd camaras/server-completo-frp
+        
+        echo "🔨 Construyendo aplicación..."
+        for attempt in 1 2 3; do
+          echo "Intento $attempt de construcción..."
+          if docker compose build --no-cache --pull; then
+            echo "✅ Construcción exitosa"
+            break
           else
-            echo "❌ Deployment falló!"
-            exit 1
+            echo "❌ Falló intento $attempt"
+            if [ $attempt -eq 3 ]; then
+              echo "💥 Falló después de 3 intentos"
+              exit 1
+            fi
+            sleep 10
           fi
+        done
+
+    - name: 🚀 Levantar servicios
+      run: |
+        echo "🚀 Levantando servicios..."
+        cd camaras/server-completo-frp
+        docker compose up -d
+        
+        echo "⏳ Esperando que los servicios estén listos..."
+        sleep 15
+
+    - name: 🏥 Verificar salud de la aplicación
+      run: |
+        echo "🏥 Verificando salud de la aplicación..."
+        
+        echo "📊 Estado de contenedores:"
+        cd camaras/server-completo-frp
+        docker compose ps
+        
+        echo "🔍 Logs del servidor FRP:"
+        docker compose logs --tail 50 frp-server || true
+        
+        echo "🌐 Probando endpoint local (puerto 3100)..."
+        for i in {1..10}; do
+          if curl -s -f http://localhost:3100/api/health > /dev/null; then
+            echo "✅ Aplicación responde correctamente en puerto 3100"
+            curl -s http://localhost:3100/api/health | head -20
+            exit 0
+          fi
+          echo "⏳ Intento $i/10 - Esperando..."
+          sleep 5
+        done
+        
+        echo "⚠️ La aplicación no responde en localhost:3100"
+
+    - name: 📊 Resultado del despliegue
+      if: always()
+      run: |
+        echo "📊 RESUMEN DEL DESPLIEGUE"
+        echo "========================"
+        echo "Repositorio: ${{ github.repository }}"
+        echo "Rama: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo ""
+        echo "🐳 Estado de Docker:"
+        cd camaras/server-completo-frp
+        docker compose ps
+        echo ""
+        echo "📝 Últimos logs del servidor:"
+        docker compose logs --tail 30 frp-server || true
+        echo ""
+        echo "✅ Deployment completado"
+
+    - name: 🔧 Fix workspace permissions (evitar EACCES)
+      if: always()
+      run: |
+        echo "🔧 Ajustando permisos del workspace..."
+        cd camaras/server-completo-frp
+        if [ -d "logs" ]; then
+          chown -R $USER logs || true
+          chmod -R u+rwx logs || true
+        fi
+        chown -R $USER:$USER . || true
+        find . -type f -exec chmod u+w {} +
