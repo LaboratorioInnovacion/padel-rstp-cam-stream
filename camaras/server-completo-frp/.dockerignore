@@ -1,0 +1,57 @@
+# ================================================================
+# .dockerignore - Archivos a excluir del build
+# ================================================================
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentación
+README.md
+SETUP-GUIDE.md
+*.md
+
+# Logs y temporales
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+# Videos y streams (se montan como volúmenes)
+videos/
+streams/*
+!streams/.gitkeep
+
+# Configuración local
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.nyc_output/
+test/
+__tests__/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backups
+*.backup
+*.bak
+*.old

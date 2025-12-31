@@ -1,0 +1,162 @@
+# ================================================================
+# GitHub Actions - Deploy FRP Server to VPS
+# ================================================================
+name: Deploy FRP Server
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'camaras/server-completo-frp/**'
+      - '.github/workflows/deploy-server.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # Permite ejecución manual
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frp-server
+
+jobs:
+  # ============================================================
+  # Job 1: Build y Test
+  # ============================================================
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./camaras/server-completo-frp
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './camaras/server-completo-frp/package-lock.json'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🔍 Verificar sintaxis
+        run: node --check server-completo-frp.mjs
+
+      - name: ✅ Tests (si existen)
+        run: npm test --if-present
+        continue-on-error: true
+
+  # ============================================================
+  # Job 2: Build Docker Image
+  # ============================================================
+  build-docker:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐳 Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🔨 Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./camaras/server-completo-frp
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  # ============================================================
+  # Job 3: Deploy a VPS (WSL2 Docker)
+  # ============================================================
+  deploy-to-vps:
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+      url: https://camarasserver-camserver-rlwh8e-a02680-31-97-64-187.traefik.me
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            # Navegar al directorio del proyecto
+            cd ${{ secrets.VPS_PROJECT_PATH || '/home/ubuntu/camaras/server-completo-frp' }}
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Login a GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull nueva imagen
+            docker compose pull
+            
+            # Recrear contenedor con nueva imagen
+            docker compose up -d --force-recreate --no-deps frp-server
+            
+            # Limpiar imágenes antiguas
+            docker image prune -af
+            
+            # Verificar estado
+            docker compose ps
+            docker compose logs --tail=50 frp-server
+
+      - name: ✅ Verificar deployment
+        run: |
+          sleep 15
+          curl -f https://camarasserver-camserver-rlwh8e-a02680-31-97-64-187.traefik.me:3000/api/health || exit 1
+
+  # ============================================================
+  # Job 4: Notificación (opcional)
+  # ============================================================
+  notify:
+    runs-on: ubuntu-latest
+    needs: [deploy-to-vps]
+    if: always()
+    
+    steps:
+      - name: 📢 Notificar resultado
+        run: |
+          if [ "${{ needs.deploy-to-vps.result }}" == "success" ]; then
+            echo "✅ Deployment exitoso!"
+          else
+            echo "❌ Deployment falló!"
+            exit 1
+          fi

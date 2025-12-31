@@ -1,0 +1,60 @@
+# ===================================================================
+# Configuración del Cliente FRP (frpc.toml)
+# Este archivo debe estar en el cliente Windows que ejecuta las cámaras
+# ===================================================================
+
+[common]
+# Dirección del servidor FRP (tu VPS)
+serverAddr = "tu-servidor.com"
+# O usa la IP pública: serverAddr = "31.97.64.187"
+serverPort = 7000
+
+# Autenticación (debe coincidir con el servidor)
+# authentication_method = "token"
+# token = "tu_token_super_secreto_12345"
+
+# Logs del cliente
+log_file = "./logs/frpc.log"
+log_level = "info"
+log_max_days = 3
+
+# ===================================================================
+# Túnel RTSP Principal
+# Expone el puerto local 8554 (MediaMTX) al puerto público 18554
+# ===================================================================
+[rtsp-tunnel]
+type = tcp
+localIP = "127.0.0.1"
+localPort = 8554
+remotePort = 18554
+
+# Las URLs públicas de las cámaras serán:
+# rtsp://tu-servidor.com:18554/camara-01
+# rtsp://tu-servidor.com:18554/camara-02
+# etc.
+
+# ===================================================================
+# Túneles adicionales (opcional)
+# ===================================================================
+
+# Ejemplo: exponer API local (si tienes una app local)
+# [api-local]
+# type = tcp
+# localIP = "127.0.0.1"
+# localPort = 3000
+# remotePort = 13000
+
+# Ejemplo: exponer servicio web
+# [web-local]
+# type = http
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["tu-subdominio.tu-servidor.com"]
+
+# ===================================================================
+# Health Check (opcional pero recomendado)
+# ===================================================================
+[rtsp-tunnel.health_check]
+type = tcp
+intervalSeconds = 10
+maxFailed = 3

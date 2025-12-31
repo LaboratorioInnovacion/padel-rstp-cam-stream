@@ -1,0 +1,12 @@
+[Unit]
+Description=Express App para cámaras
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/multi-cam-frp/server/src/server.mjs
+WorkingDirectory=/opt/multi-cam-frp/server/src
+Restart=always
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

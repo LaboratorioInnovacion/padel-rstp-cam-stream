@@ -1,0 +1,9 @@
+serverAddr = "https://asd-camfrp-omw9b5-f3fb7f-31-97-64-187.traefik.me/"
+serverPort = 7000
+
+[[proxies]]
+name = "test-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6000

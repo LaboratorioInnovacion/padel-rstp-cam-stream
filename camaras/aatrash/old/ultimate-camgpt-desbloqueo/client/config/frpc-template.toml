@@ -1,0 +1,6 @@
+```toml
+[common]
+server_addr = "<TU_SERVIDOR_PUBLICO>"
+server_port = 7000
+
+__CAMERAS__   # Se reemplaza dinámicamente con bloques [[proxies]] por cámara

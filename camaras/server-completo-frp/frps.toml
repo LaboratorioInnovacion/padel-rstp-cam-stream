@@ -1,0 +1,45 @@
+# ================================================================
+# Configuración del Servidor FRP (frps.toml)
+# ================================================================
+# Este archivo configura el servidor FRP que corre en tu VPS
+
+[common]
+# Puerto de control - Los clientes FRP se conectan aquí
+bind_port = 7000
+
+# Dashboard web (opcional pero útil para monitoreo)
+dashboard_addr = "0.0.0.0"
+dashboard_port = 7500
+dashboard_user = "admin"
+dashboard_pwd = "admin123"  # CAMBIA ESTO en producción
+
+# Logs del servidor
+log_file = "./logs/frps.log"
+log_level = "info"
+log_max_days = 3
+
+# Autenticación (IMPORTANTE para seguridad)
+# Descomenta y cambia el token
+# authentication_method = "token"
+# token = "tu_token_super_secreto_12345"
+
+# Límites de recursos (opcional)
+# max_pool_count = 5
+# max_ports_per_client = 10
+
+# ================================================================
+# Configuración de Puertos Permitidos
+# ================================================================
+# Permite que los clientes usen estos puertos para sus túneles
+# Esto es necesario para el puerto RTSP 18554
+
+# Permitir rango de puertos para servicios
+allow_ports = 7000-20000
+
+# ================================================================
+# IMPORTANTE: Asegúrate de que tu firewall permita:
+# - Puerto 7000 (control FRP)
+# - Puerto 18554 (RTSP público)
+# - Puerto 7500 (dashboard web)
+# - Puerto 3000 (API Express)
+# ================================================================

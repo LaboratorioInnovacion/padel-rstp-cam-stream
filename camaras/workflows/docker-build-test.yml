@@ -1,0 +1,39 @@
+# ================================================================
+# GitHub Actions - Docker Build Test (PR)
+# ================================================================
+name: Docker Build Test
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'camaras/server-completo-frp/**'
+      - '.github/workflows/docker-build-test.yml'
+
+jobs:
+  test-docker-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐳 Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔨 Build Docker image (test only)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./camaras/server-completo-frp
+          push: false
+          tags: frp-server:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: ✅ Test image
+        run: |
+          docker run --rm -d -p 3000:3000 --name frp-test frp-server:test
+          sleep 10
+          docker logs frp-test
+          curl -f http://localhost:3000/api/health || exit 1
+          docker stop frp-test

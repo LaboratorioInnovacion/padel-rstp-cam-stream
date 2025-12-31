@@ -1,0 +1,1 @@
+cancha1=rtsp://augustodelcampo97:Nodotecnologico1*@192.168.1.181:554/stream1

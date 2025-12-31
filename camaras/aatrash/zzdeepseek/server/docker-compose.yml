@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  cam-server:
+    build: .
+    image: cam-server:1.0
+    container_name: cam-server
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY}
+      - FRP_DOMAIN=${FRP_DOMAIN}
+      - FRP_RTSP_PORT=${FRP_RTSP_PORT}
+      - GOOGLE_DRIVE_FOLDER_ID=${DRIVE_FOLDER_ID}
+      - GOOGLE_DRIVE_CREDS=${DRIVE_CREDS_JSON}
+    volumes:
+      - ./data/streams:/app/streams
+      - ./data/records:/app/records
+      - ./data/logs:/app/logs
+      - ./data/cameras.json:/app/cameras.json
+    ports:
+      - "3000:3000"
+      - "7000:7000"
+      - "18554:18554"
+    networks:
+      - cam-net
+
+networks:
+  cam-net:
+    driver: bridge

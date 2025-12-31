@@ -1,0 +1,27 @@
+[common]
+# Puerto principal de control FRP
+bind_port = 7000
+
+# Puerto HTTP para health checks (opcional)
+vhost_http_port = 8080
+
+# Dashboard web de FRP (opcional)
+dashboard_port = 7500
+dashboard_user = "admin"
+dashboard_pwd = "admin123"
+
+# Habilitar dashboard
+# Accede a http://tu-servidor:7500 con las credenciales de arriba
+
+# Logs
+log_file = "./logs/frps.log"
+log_level = "info"
+log_max_days = 3
+
+# Autenticación (descomenta para usar)
+# authentication_method = "token"
+# token = "tu_token_super_secreto_12345"
+
+# Límites (opcional)
+# max_pool_count = 50
+# max_ports_per_client = 10
