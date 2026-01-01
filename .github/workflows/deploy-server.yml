@@ -82,35 +82,6 @@ jobs:
         chmod 777 streams videos logs
         echo "✅ Directorios creados"
 
-    - name: 🔓 Abrir puertos para FRP
-      run: |
-        echo "🔓 Configurando firewall para FRP..."
-        
-        # Verificar si ufw está instalado
-        if ! command -v ufw &> /dev/null; then
-          echo "⚠️ UFW no está instalado, saltando configuración de firewall"
-          exit 0
-        fi
-        
-        # Configurar sudoers para ufw (una sola vez)
-        if ! sudo grep -q "NOPASSWD.*ufw" /etc/sudoers 2>/dev/null; then
-          echo "🔧 Configurando permisos sudoers para UFW..."
-          echo "$USER ALL=(ALL) NOPASSWD: /usr/sbin/ufw" | sudo tee -a /etc/sudoers.d/github-runner-ufw
-          sudo chmod 0440 /etc/sudoers.d/github-runner-ufw
-        fi
-        
-        # Abrir puerto 7000 (FRP Control Port)
-        sudo ufw allow 7000/tcp comment 'FRP Control Port' || echo "Puerto 7000 ya configurado"
-        
-        # Abrir puerto 18554 (RTSP Public Port)
-        sudo ufw allow 18554/tcp comment 'RTSP Public Port' || echo "Puerto 18554 ya configurado"
-        
-        # Habilitar UFW si no está activo
-        sudo ufw --force enable || true
-        
-        echo "✅ Puertos configurados:"
-        sudo ufw status | grep -E "(7000|18554)" || echo "Puertos configurados correctamente"
-
     - name: 🏗️ Construir y desplegar aplicación
       run: |
         echo "🏗️ Iniciando construcción..."
