@@ -80,7 +80,7 @@ jobs:
         docker run -d \
           --name camaras-frontend \
           --restart unless-stopped \
-          -p 8080:80 \
+          -p 3110:80 \
           camaras-frontend:latest
         
         echo "⏳ Esperando que el frontend esté listo..."
@@ -93,17 +93,17 @@ jobs:
         echo "📊 Estado del contenedor:"
         docker ps | grep camaras-frontend || true
         
-        echo "🌐 Probando endpoint (puerto 8080)..."
+        echo "🌐 Probando endpoint (puerto 3110)..."
         for i in {1..10}; do
-          if curl -s -f http://localhost:8080 > /dev/null; then
-            echo "✅ Frontend responde correctamente en puerto 8080"
+          if curl -s -f http://localhost:3110 > /dev/null; then
+            echo "✅ Frontend responde correctamente en puerto 3110"
             exit 0
           fi
           echo "⏳ Intento $i/10 - Esperando..."
           sleep 3
         done
         
-        echo "⚠️ El frontend no responde en localhost:8080"
+        echo "⚠️ El frontend no responde en localhost:3110"
         docker logs camaras-frontend --tail 20
 
     - name: 📊 Resultado del despliegue
