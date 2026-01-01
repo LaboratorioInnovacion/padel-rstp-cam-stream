@@ -1,0 +1,12 @@
+[Unit]
+Description=Multi-Cam FRP Express App
+After=network.target frps.service
+
+[Service]
+WorkingDirectory=/opt/multi-cam-frp
+ExecStart=/usr/bin/node /opt/multi-cam-frp/src/server.mjs
+Restart=on-failure
+User=www-data
+
+[Install]
+WantedBy=multi-user.target

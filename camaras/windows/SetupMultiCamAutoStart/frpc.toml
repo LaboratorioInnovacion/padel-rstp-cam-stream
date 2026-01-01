@@ -6,7 +6,7 @@
 
 [common]
 # Dirección del servidor FRP (tu VPS)
-serverAddr = "camarasserver-camserver-rlwh8e-a02680-31-97-64-187.traefik.me"
+serverAddr = "padel.noaservice.org"
 serverPort = 7000
 
 # Logs del cliente (opcional)

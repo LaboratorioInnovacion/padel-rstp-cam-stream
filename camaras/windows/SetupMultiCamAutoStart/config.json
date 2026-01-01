@@ -1,0 +1,10 @@
+{
+  "serverUrl": "https://padel.noaservice.org",
+  "serverPort": 3100,
+  "rtspPublicHost": "padel.noaservice.org",
+  "rtspPublicPort": 18554,
+  "mediaRtspPort": 8554,
+  "logDirectory": "logs",
+  "cameraFile": "camaras.txt",
+  "outputFile": "urls-publicas.txt"
+}

@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  frps:
+    image: fatedier/frps:latest
+    volumes:
+      - ./config/frps.toml:/etc/frp/frps.toml
+    ports:
+      - '7000:7000'
+      - '18554:18554'
+      - '7500:7500'
+      - '8080:8080'
+    restart: always
+  app:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - ./streams:/app/streams
+      - ./records:/app/records
+      - ./cameras.json:/app/cameras.json
+    environment:
+      - PORT=3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      - frps
