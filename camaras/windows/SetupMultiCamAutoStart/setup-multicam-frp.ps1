@@ -1,195 +1,85 @@
 # ===================================================================
-# setup-multicam-frp.ps1 - Versión Mejorada
-# Automatiza MediaMTX, FRP y registro en backend con CLI interactivo
+# setup-multicam-frp.ps1 - Version Simplificada
+# Automatiza MediaMTX, FRP y registro en backend
 # ===================================================================
 
 param(
-    [string]$Action = "menu",
-    [string]$CameraId,
-    [string]$RtspUrl
+    [string]$Action = "menu"
 )
 
+$ErrorActionPreference = "Continue"
+
 # Cargar configuración
-$configPath = ".\config.json"
-if (-not (Test-Path $configPath)) {
-    Write-Error "❌ No se encontró config.json"
+if (-not (Test-Path ".\config.json")) {
+    Write-Host "Error: No se encontro config.json" -ForegroundColor Red
+    Read-Host "Presiona Enter para salir"
     exit 1
 }
-$config = Get-Content $configPath | ConvertFrom-Json
+
+$config = Get-Content ".\config.json" | ConvertFrom-Json
 
 # ===================================================================
-# Funciones auxiliares
+# FUNCIONES
 # ===================================================================
 
-function Test-Prerequisites {
-    Write-Host "🔍 Verificando prerrequisitos..." -ForegroundColor Cyan
-    $requiredFiles = @("mediamtx.exe", "frpc.exe", "ffmpeg.exe", "frpc.toml", $config.cameraFile)
-    $missing = @()
-    foreach ($file in $requiredFiles) {
-        if (-not (Test-Path $file)) {
-            $missing += $file
-        }
-    }
-    if ($missing.Count -gt 0) {
-        Write-Error "❌ Faltan archivos: $($missing -join ', ')"
-        return $false
-    }
-    Write-Host "✅ Todos los archivos necesarios están presentes" -ForegroundColor Green
-    return $true
+function Show-Menu {
+    Clear-Host
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  SETUP MULTI-CAMARA FRP" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "1. Iniciar todos los servicios" -ForegroundColor White
+    Write-Host "2. Agregar camara" -ForegroundColor White
+    Write-Host "3. Listar camaras" -ForegroundColor White
+    Write-Host "4. Detener servicios" -ForegroundColor White
+    Write-Host "0. Salir" -ForegroundColor White
+    Write-Host ""
 }
 
-function Stop-AllProcesses {
-    Write-Host "🧹 Deteniendo todos los procesos..." -ForegroundColor Yellow
+function Start-Services {
+    Write-Host ""
+    Write-Host "Deteniendo procesos previos..." -ForegroundColor Yellow
     Get-Process -Name mediamtx, frpc, ffmpeg -ErrorAction SilentlyContinue | Stop-Process -Force
-    Write-Host "✅ Procesos detenidos" -ForegroundColor Green
-}
-
-function Start-MediaMTX {
-    Write-Host "▶ Iniciando MediaMTX..." -ForegroundColor Cyan
+    Start-Sleep -Seconds 2
+    
+    Write-Host "Iniciando MediaMTX..." -ForegroundColor Cyan
     Start-Process -NoNewWindow -FilePath ".\mediamtx.exe"
     Start-Sleep -Seconds 3
-    if (-not (Get-Process -Name "mediamtx" -ErrorAction SilentlyContinue)) {
-        Write-Error "❌ MediaMTX no se inició correctamente"
-        return $false
-    }
-    Write-Host "✅ MediaMTX iniciado en puerto $($config.mediaRtspPort)" -ForegroundColor Green
-    return $true
-}
-
-function Start-FRPClient {
-    Write-Host "▶ Iniciando FRPC (túnel RTSP)..." -ForegroundColor Cyan
-    Start-Process -NoNewWindow -FilePath ".\frpc.exe" -ArgumentList "-c .\frpc.toml"
-    Start-Sleep -Seconds 5
-    if (-not (Get-Process -Name "frpc" -ErrorAction SilentlyContinue)) {
-        Write-Error "❌ FRPC no se inició correctamente"
-        return $false
-    }
-    Write-Host "✅ FRPC conectado al servidor FRP" -ForegroundColor Green
-    return $true
-}
-
-function Add-Camera {
-    param([string]$Id, [string]$Url)
     
-    if (-not $Id) {
-        $Id = Read-Host "ID de la cámara (ej: cam1, padel1)"
-    }
-    if (-not $Url) {
-        $Url = Read-Host "URL RTSP (ej: rtsp://usuario:pass@192.168.1.100:554/stream1)"
-    }
-    
-    # Validar que no exista
-    $cameras = Get-Content $config.cameraFile -ErrorAction SilentlyContinue
-    if ($cameras -match "^$Id\s*=") {
-        Write-Warning "⚠️ La cámara '$Id' ya existe. ¿Desea sobrescribirla? (S/N)"
-        $response = Read-Host
-        if ($response -ne "S") {
-            return
-        }
-        # Eliminar línea existente
-        $cameras = $cameras | Where-Object { $_ -notmatch "^$Id\s*=" }
-        $cameras | Set-Content $config.cameraFile
-    }
-    
-    # Agregar nueva cámara
-    "$Id=$Url" | Add-Content $config.cameraFile
-    Write-Host "✅ Cámara '$Id' agregada correctamente" -ForegroundColor Green
-}
-
-function Remove-Camera {
-    param([string]$Id)
-    
-    if (-not $Id) {
-        List-Cameras
-        $Id = Read-Host "`nID de la cámara a eliminar"
-    }
-    
-    $cameras = Get-Content $config.cameraFile -ErrorAction SilentlyContinue
-    $filtered = $cameras | Where-Object { $_ -notmatch "^$Id\s*=" }
-    
-    if ($cameras.Count -eq $filtered.Count) {
-        Write-Warning "⚠️ No se encontró la cámara '$Id'"
+    if (Get-Process -Name "mediamtx" -ErrorAction SilentlyContinue) {
+        Write-Host "[OK] MediaMTX iniciado" -ForegroundColor Green
+    } else {
+        Write-Host "[ERROR] MediaMTX no se inicio" -ForegroundColor Red
+        Read-Host "Presiona Enter"
         return
     }
     
-    $filtered | Set-Content $config.cameraFile
-    Write-Host "✅ Cámara '$Id' eliminada" -ForegroundColor Green
-}
-
-function List-Cameras {
-    Write-Host "`n📹 Cámaras registradas:" -ForegroundColor Cyan
-    Write-Host "===========================================" -ForegroundColor Cyan
-    $cameras = Get-Content $config.cameraFile -ErrorAction SilentlyContinue
-    if (-not $cameras) {
-        Write-Host "No hay cámaras registradas" -ForegroundColor Yellow
+    Write-Host "Iniciando FRPC..." -ForegroundColor Cyan
+    
+    # Crear directorio de logs si no existe
+    if (-not (Test-Path ".\logs")) {
+        New-Item -ItemType Directory -Path ".\logs" | Out-Null
+    }
+    
+    # Verificar que frpc.toml existe
+    if (-not (Test-Path ".\frpc.toml")) {
+        Write-Host "[ERROR] No se encuentra frpc.toml" -ForegroundColor Red
+        Read-Host "Presiona Enter"
         return
     }
-    foreach ($cam in $cameras) {
-        if ($cam.Trim() -eq "") { continue }
-        $parts = $cam -split "="
-        if ($parts.Count -eq 2) {
-            Write-Host "  • $($parts[0].Trim()) → $($parts[1].Trim())" -ForegroundColor White
-        }
-    }
-    Write-Host "===========================================" -ForegroundColor Cyan
-}
-
-function Start-CameraStreaming {
-    param([string]$CamId, [string]$LocalRtsp)
     
-    $rtspTargetLocal = "rtsp://localhost:$($config.mediaRtspPort)/$CamId"
-    
-    Write-Host ""
-    Write-Host "▶ Iniciando FFmpeg para '$CamId'…" -ForegroundColor Cyan
-    Write-Host "    Local RTSP: $LocalRtsp" -ForegroundColor Gray
-    Write-Host "    Enviando a: $rtspTargetLocal" -ForegroundColor Gray
-    
-    $ffmpegArgs = @(
-        "-rtsp_transport", "tcp"
-        "-i", "`"$LocalRtsp`""
-        "-c", "copy"
-        "-f", "rtsp"
-        "`"$rtspTargetLocal`""
-    )
-    
-    $logDir = $config.logDirectory
-    if (-not (Test-Path $logDir)) { 
-        New-Item -ItemType Directory -Path $logDir | Out-Null 
-    }
-    
-    Start-Process -WindowStyle Hidden -FilePath ".\ffmpeg.exe" -ArgumentList $ffmpegArgs `
-        -RedirectStandardOutput ".\$logDir\$CamId-out.log" `
-        -RedirectStandardError ".\$logDir\$CamId-err.log"
-    
+    # Iniciar FRPC con ruta absoluta al archivo de configuración
+    $configPath = Resolve-Path ".\frpc.toml"
+    Write-Host "Usando configuracion: $configPath" -ForegroundColor Gray
+    Start-Process -NoNewWindow -FilePath ".\frpc.exe" -ArgumentList "-c `"$configPath`""
     Start-Sleep -Seconds 5
     
-    # Registrar en backend
-    $publicRtsp = "rtsp://$($config.rtspPublicHost):$($config.rtspPublicPort)/$CamId"
-    $registerUrl = "$($config.serverUrl):$($config.serverPort)/api/register"
-    
-    Write-Host "▶ Registrando '$CamId' en el servidor..." -ForegroundColor Cyan
-    
-    $payload = @{
-        camId     = $CamId
-        publicUrl = $publicRtsp
-    } | ConvertTo-Json -Compress
-    
-    try {
-        Invoke-RestMethod -Uri $registerUrl -Method POST -Body $payload -ContentType "application/json"
-        Write-Host "   ✅ Registrada: $CamId → $publicRtsp" -ForegroundColor Green
-        "$CamId = $publicRtsp" | Out-File -FilePath ".\$($config.outputFile)" -Append
-    } catch {
-        Write-Warning "❌ Falló registro para $CamId : $_"
-    }
-}
-
-function Start-AllCameras {
-    if (-not (Test-Prerequisites)) { return }
-    
-    if (-not (Start-MediaMTX)) { return }
-    if (-not (Start-FRPClient)) { 
-        Stop-AllProcesses
-        return 
+    if (Get-Process -Name "frpc" -ErrorAction SilentlyContinue) {
+        Write-Host "[OK] FRPC conectado" -ForegroundColor Green
+    } else {
+        Write-Host "[ERROR] FRPC no se inicio" -ForegroundColor Red
+        Read-Host "Presiona Enter"
+        return
     }
     
     # Limpiar archivo de URLs
@@ -197,94 +87,189 @@ function Start-AllCameras {
         Remove-Item $config.outputFile
     }
     
-    # Leer y procesar cámaras
-    $camarasRaw = Get-Content $config.cameraFile -ErrorAction SilentlyContinue
-    if (-not $camarasRaw) {
-        Write-Warning "⚠️ No hay cámaras en $($config.cameraFile)"
+    # Leer camaras
+    if (-not (Test-Path $config.cameraFile)) {
+        Write-Host "[ERROR] No existe $($config.cameraFile)" -ForegroundColor Red
+        Read-Host "Presiona Enter"
         return
     }
     
-    foreach ($linea in $camarasRaw) {
-        if ($linea.Trim() -eq "" -or $linea.StartsWith("#")) { continue }
-        $parts = $linea -split "="
-        if ($parts.Count -ne 2) { 
-            Write-Warning "❗ Línea inválida: $linea"
-            continue 
+    $cameras = Get-Content $config.cameraFile
+    
+    foreach ($line in $cameras) {
+        if ($line.Trim() -eq "" -or $line.StartsWith("#")) { continue }
+        
+        # Formato: ID|HOST|PORT|USER|PASS|PATH
+        # Ejemplo: cam1|192.168.1.100|554|admin|password123|/stream1
+        $parts = $line -split "\|"
+        if ($parts.Count -lt 6) {
+            # Formato antiguo: ID=rtsp://...
+            $oldParts = $line -split "="
+            if ($oldParts.Count -eq 2) {
+                $camId = $oldParts[0].Trim()
+                $rtspUrl = $oldParts[1].Trim()
+            } else {
+                continue
+            }
+        } else {
+            # Formato nuevo
+            $camId = $parts[0].Trim()
+            $cameraHost = $parts[1].Trim()
+            $port = $parts[2].Trim()
+            $user = $parts[3].Trim()
+            $pass = $parts[4].Trim()
+            $path = $parts[5].Trim()
+            $rtspUrl = "rtsp://${user}:${pass}@${cameraHost}:${port}${path}"
         }
-        $camId = $parts[0].Trim()
-        $localRtsp = $parts[1].Trim()
-        Start-CameraStreaming -CamId $camId -LocalRtsp $localRtsp
+        
+        Write-Host ""
+        Write-Host "Iniciando camara: $camId" -ForegroundColor Cyan
+        
+        $rtspTarget = "rtsp://localhost:$($config.mediaRtspPort)/$camId"
+        
+        if (-not (Test-Path $config.logDirectory)) {
+            New-Item -ItemType Directory -Path $config.logDirectory | Out-Null
+        }
+        
+        $ffmpegArgs = @(
+            "-rtsp_transport", "tcp",
+            "-i", $rtspUrl,
+            "-c", "copy",
+            "-f", "rtsp",
+            $rtspTarget
+        )
+        
+        Start-Process -WindowStyle Hidden -FilePath ".\ffmpeg.exe" -ArgumentList $ffmpegArgs `
+            -RedirectStandardOutput ".\$($config.logDirectory)\$camId-out.log" `
+            -RedirectStandardError ".\$($config.logDirectory)\$camId-err.log"
+        
+        Start-Sleep -Seconds 5
+        
+        # Registrar en backend
+        $publicUrl = "rtsp://$($config.rtspPublicHost):$($config.rtspPublicPort)/$camId"
+        $registerUrl = "$($config.serverUrl):$($config.serverPort)/api/register"
+        
+        Write-Host "Registrando en backend..." -ForegroundColor Gray
+        
+        $body = @{
+            camId = $camId
+            publicUrl = $publicUrl
+        } | ConvertTo-Json
+        
+        try {
+            Invoke-RestMethod -Uri $registerUrl -Method POST -Body $body -ContentType "application/json" | Out-Null
+            Write-Host "[OK] Registrada: $camId" -ForegroundColor Green
+            "$camId = $publicUrl" | Out-File -FilePath $config.outputFile -Append
+        } catch {
+            Write-Host "[WARN] No se pudo registrar: $camId" -ForegroundColor Yellow
+        }
     }
     
     Write-Host ""
-    Write-Host "✅ Todos los procesos están corriendo" -ForegroundColor Green
-    Write-Host "📄 URLs públicas guardadas en: $($config.outputFile)" -ForegroundColor Cyan
-    Write-Host "⚠️  Presiona Ctrl+C para detenerlos" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "TODO INICIADO" -ForegroundColor Green
+    Write-Host "URLs publicas en: $($config.outputFile)" -ForegroundColor Cyan
+    Write-Host "Presiona Ctrl+C para detener" -ForegroundColor Yellow
+    Write-Host ""
     
-    # Mantener consola abierta
     while ($true) { Start-Sleep -Seconds 1 }
 }
 
-function Show-Menu {
-    Clear-Host
-    Write-Host "╔═══════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║    SETUP MULTI-CÁMARA FRP - Menú Principal   ║" -ForegroundColor Cyan
-    Write-Host "╚═══════════════════════════════════════════════╝" -ForegroundColor Cyan
+function Add-Camera {
     Write-Host ""
-    Write-Host "1. ▶️  Iniciar todos los servicios y cámaras" -ForegroundColor White
-    Write-Host "2. ➕ Agregar nueva cámara" -ForegroundColor White
-    Write-Host "3. ➖ Eliminar cámara" -ForegroundColor White
-    Write-Host "4. 📋 Listar cámaras" -ForegroundColor White
-    Write-Host "5. 🧹 Detener todos los servicios" -ForegroundColor White
-    Write-Host "6. 📝 Ver logs de una cámara" -ForegroundColor White
-    Write-Host "0. ❌ Salir" -ForegroundColor White
-    Write-Host ""
+    $camId = Read-Host "ID de la camara (ej: cam1)"
+    $cameraHost = Read-Host "IP o host de la camara (ej: 192.168.1.100)"
+    $port = Read-Host "Puerto RTSP (ej: 554)"
+    $user = Read-Host "Usuario (ej: admin)"
+    $pass = Read-Host "Contrasena"
+    $path = Read-Host "Path del stream (ej: /stream1 o /Streaming/Channels/101)"
+    
+    if (-not $camId -or -not $cameraHost) {
+        Write-Host "[ERROR] Datos invalidos" -ForegroundColor Red
+        Read-Host "Presiona Enter"
+        return
+    }
+    
+    # Valores por defecto
+    if (-not $port) { $port = "554" }
+    if (-not $user) { $user = "admin" }
+    if (-not $pass) { $pass = "admin" }
+    if (-not $path) { $path = "/stream1" }
+    
+    # Formato: ID|HOST|PORT|USER|PASS|PATH
+    "$camId|$cameraHost|$port|$user|$pass|$path" | Add-Content $config.cameraFile
+    Write-Host "[OK] Camara agregada" -ForegroundColor Green
+    Read-Host "Presiona Enter"
 }
 
-function Show-Logs {
-    List-Cameras
-    $camId = Read-Host "`nID de la cámara para ver logs"
-    $logFile = ".\$($config.logDirectory)\$camId-err.log"
+function List-Cameras {
+    Write-Host ""
+    Write-Host "CAMARAS REGISTRADAS:" -ForegroundColor Cyan
+    Write-Host "====================" -ForegroundColor Cyan
     
-    if (Test-Path $logFile) {
-        Write-Host "`n📝 Últimas 30 líneas de logs:" -ForegroundColor Cyan
-        Get-Content $logFile -Tail 30
-    } else {
-        Write-Warning "⚠️ No se encontró archivo de log para '$camId'"
+    if (-not (Test-Path $config.cameraFile)) {
+        Write-Host "[ERROR] No existe $($config.cameraFile)" -ForegroundColor Red
+        Read-Host "Presiona Enter"
+        return
     }
-    Read-Host "`nPresiona Enter para continuar"
+    
+    $cameras = Get-Content $config.cameraFile
+    
+    foreach ($line in $cameras) {
+        if ($line.Trim() -eq "" -or $line.StartsWith("#")) { continue }
+        
+        # Formato: ID|HOST|PORT|USER|PASS|PATH
+        $parts = $line -split "\|"
+        if ($parts.Count -ge 6) {
+            $camId = $parts[0].Trim()
+            $cameraHost = $parts[1].Trim()
+            $port = $parts[2].Trim()
+            $user = $parts[3].Trim()
+            $path = $parts[5].Trim()
+            $displayUrl = "rtsp://${user}:****@${cameraHost}:${port}${path}"
+            Write-Host "  $camId -> $displayUrl" -ForegroundColor White
+        } else {
+            # Formato antiguo
+            $oldParts = $line -split "="
+            if ($oldParts.Count -eq 2) {
+                Write-Host "  $($oldParts[0]) -> $($oldParts[1])" -ForegroundColor White
+            }
+        }
+    }
+    
+    Write-Host ""
+    Read-Host "Presiona Enter"
+}
+
+function Stop-Services {
+    Write-Host ""
+    Write-Host "Deteniendo servicios..." -ForegroundColor Yellow
+    Get-Process -Name mediamtx, frpc, ffmpeg -ErrorAction SilentlyContinue | Stop-Process -Force
+    Write-Host "[OK] Servicios detenidos" -ForegroundColor Green
+    Read-Host "Presiona Enter"
 }
 
 # ===================================================================
-# Lógica principal
+# LOGICA PRINCIPAL
 # ===================================================================
 
 if ($Action -eq "start") {
-    Start-AllCameras
-}
-elseif ($Action -eq "add" -and $CameraId -and $RtspUrl) {
-    Add-Camera -Id $CameraId -Url $RtspUrl
-}
-elseif ($Action -eq "menu") {
+    Start-Services
+} elseif ($Action -eq "menu") {
     while ($true) {
         Show-Menu
-        $opcion = Read-Host "Selecciona una opción"
+        $opcion = Read-Host "Opcion"
         
         switch ($opcion) {
-            "1" { Start-AllCameras }
+            "1" { Start-Services }
             "2" { Add-Camera }
-            "3" { Remove-Camera }
-            "4" { List-Cameras; Read-Host "`nPresiona Enter para continuar" }
-            "5" { Stop-AllProcesses; Read-Host "`nPresiona Enter para continuar" }
-            "6" { Show-Logs }
+            "3" { List-Cameras }
+            "4" { Stop-Services }
             "0" { exit }
-            default { Write-Warning "Opción inválida" }
+            default { Write-Host "Opcion invalida" -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
     }
-}
-else {
-    Write-Host "Uso:" -ForegroundColor Cyan
-    Write-Host "  .\setup-multicam-frp.ps1                                    # Menú interactivo" -ForegroundColor White
-    Write-Host "  .\setup-multicam-frp.ps1 -Action start                      # Iniciar todo" -ForegroundColor White
-    Write-Host "  .\setup-multicam-frp.ps1 -Action add -CameraId cam1 -RtspUrl rtsp://..." -ForegroundColor White
+} else {
+    Write-Host "Uso: .\setup-multicam-frp.ps1" -ForegroundColor Cyan
+    Write-Host "     .\setup-multicam-frp.ps1 -Action start" -ForegroundColor Cyan
 }

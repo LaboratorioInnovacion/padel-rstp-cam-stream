@@ -2,7 +2,25 @@
 
 Sistema automatizado para gestionar múltiples cámaras RTSP con túnel FRP.
 
-## 📋 Características
+## � Instalación Rápida (Primera vez)
+
+### 1. Verificar sistema
+Ejecuta primero para ver qué archivos faltan:
+```
+verificar.bat
+```
+
+### 2. Descargar archivos faltantes
+El script te dirá qué descargar y desde dónde.
+
+### 3. Ejecutar
+```
+iniciar.bat
+```
+
+**¡Listo!** El archivo `.bat` se encarga de todos los permisos automáticamente.
+
+## �📋 Características
 
 - ✅ Menú interactivo CLI
 - ✅ Agregar/eliminar cámaras fácilmente
@@ -13,18 +31,26 @@ Sistema automatizado para gestionar múltiples cámaras RTSP con túnel FRP.
 
 ## 🚀 Uso Rápido
 
-### Opción 1: Menú Interactivo (Recomendado)
+### Método 1: Doble clic (Recomendado)
+```
+1. Doble clic en: iniciar.bat
+2. Selecciona opción del menú
+3. ¡Listo!
+```
+
+### Método 2: PowerShell (Alternativo)
 ```powershell
+# Solo si prefieres usar PowerShell directamente
 .\setup-multicam-frp.ps1
 ```
 
-### Opción 2: Línea de Comandos
+### Método 3: Línea de Comandos
 ```powershell
-# Iniciar todos los servicios
+# Iniciar todo sin menú
 .\setup-multicam-frp.ps1 -Action start
 
 # Agregar cámara por CLI
-.\setup-multicam-frp.ps1 -Action add -CameraId cam1 -RtspUrl "rtsp://admin:pass@192.168.1.100:554/stream1"
+.\setup-multicam-frp.ps1 -Action add -CameraId cam1 -RtspUrl "rtsp://..."
 ```
 
 ## 📁 Archivos Necesarios
