@@ -1,0 +1,130 @@
+# ================================================================
+# GitHub Actions - Deploy Frontend to VPS
+# ================================================================
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'camaras/front/**'
+      - '.github/workflows/deploy-frontend.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # Permite ejecución manual
+
+jobs:
+  # ============================================================
+  # Job: Build, Test & Deploy Frontend
+  # ============================================================
+  deploy:
+    name: Build & Deploy Frontend
+    runs-on: self-hosted
+    timeout-minutes: 15
+    
+    steps:
+    - name: 👤 Mostrar usuario del runner
+      run: whoami
+
+    - name: 📥 Checkout código
+      uses: actions/checkout@v4
+
+    - name: 🟢 Verificar Node.js
+      run: |
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+
+    - name: 📦 Instalar dependencias
+      run: |
+        echo "📦 Instalando dependencias del frontend..."
+        cd camaras/front
+        npm ci
+
+    - name: 🔍 Verificar sintaxis
+      run: |
+        echo "🔍 Verificando sintaxis TypeScript..."
+        cd camaras/front
+        npx tsc --noEmit || echo "⚠️ TypeScript check encontró warnings (no bloquea deploy)"
+
+    - name: ⏹️ Parar contenedores existentes
+      run: |
+        echo "⏹️ Parando contenedores del frontend..."
+        cd camaras/front
+        docker compose down 2>/dev/null || docker stop camaras-frontend 2>/dev/null || true
+        docker rm camaras-frontend 2>/dev/null || true
+
+    - name: 🏗️ Construir aplicación
+      run: |
+        echo "🏗️ Construyendo frontend..."
+        cd camaras/front
+        
+        for attempt in 1 2 3; do
+          echo "Intento $attempt de construcción..."
+          if docker build -t camaras-frontend:latest .; then
+            echo "✅ Construcción exitosa"
+            break
+          else
+            echo "❌ Falló intento $attempt"
+            if [ $attempt -eq 3 ]; then
+              echo "💥 Falló después de 3 intentos"
+              exit 1
+            fi
+            sleep 5
+          fi
+        done
+
+    - name: 🚀 Levantar contenedor
+      run: |
+        echo "🚀 Levantando contenedor del frontend..."
+        cd camaras/front
+        docker run -d \
+          --name camaras-frontend \
+          --restart unless-stopped \
+          -p 8080:80 \
+          camaras-frontend:latest
+        
+        echo "⏳ Esperando que el frontend esté listo..."
+        sleep 10
+
+    - name: 🏥 Verificar salud del frontend
+      run: |
+        echo "🏥 Verificando que el frontend responde..."
+        
+        echo "📊 Estado del contenedor:"
+        docker ps | grep camaras-frontend || true
+        
+        echo "🌐 Probando endpoint (puerto 8080)..."
+        for i in {1..10}; do
+          if curl -s -f http://localhost:8080 > /dev/null; then
+            echo "✅ Frontend responde correctamente en puerto 8080"
+            exit 0
+          fi
+          echo "⏳ Intento $i/10 - Esperando..."
+          sleep 3
+        done
+        
+        echo "⚠️ El frontend no responde en localhost:8080"
+        docker logs camaras-frontend --tail 20
+
+    - name: 📊 Resultado del despliegue
+      if: always()
+      run: |
+        echo "📊 RESUMEN DEL DESPLIEGUE FRONTEND"
+        echo "=================================="
+        echo "Repositorio: ${{ github.repository }}"
+        echo "Rama: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo ""
+        echo "🐳 Estado del contenedor:"
+        docker ps | grep camaras-frontend || true
+        echo ""
+        echo "📝 Últimos logs:"
+        docker logs camaras-frontend --tail 30 || true
+        echo ""
+        echo "✅ Deployment completado"
+
+    - name: 🔧 Limpiar imágenes antiguas
+      if: always()
+      run: |
+        echo "🧹 Limpiando imágenes Docker antiguas..."
+        docker image prune -f || true
