@@ -7,6 +7,4 @@
 # padel1|192.168.1.181|554|admin|pass123|/Streaming/Channels/101
 # ===================================================================
 
-cancha1|192.168.1.181|554|augustodelcampo97|Nodotecnologico1*|/stream1
-cam2|192.168.1.240|1935|admin|admin|/live
-cam3|System.Management.Automation.Internal.Host.InternalHost|1945|asd|asd|stream2
+cam1|192.168.1.240|1945|asd|asd|/

@@ -2,7 +2,6 @@
 # Docker Compose - Servidor FRP Completo
 # ================================================================
 # Nota: Cloudflared se ejecuta nativamente en el host, no en Docker
-version: "3.9"
 
 services:
   # ============================================================

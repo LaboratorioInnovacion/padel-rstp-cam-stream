@@ -10,18 +10,25 @@ import { uploadToDrive } from './utils/uploadToDrive.js';
 const app = express();
 const PORT = 3100;
 const CAM_FILE = './cameras.json';
+
 // === 0. CONFIGURACIÓN INICIAL ===
-// Otorgar permisos de ejecución al archivo frps
-try {
-  execSync('chmod +x ./frps');
-  console.log('✅ Permisos otorgados al archivo frps.');
-} catch (err) {
-  console.error('❌ Error otorgando permisos:', err.message);
+// Determinar ruta del binario frps (Docker usa /usr/local/bin, local usa ./)
+const FRPS_PATH = process.env.NODE_ENV === 'production' ? 'frps' : './frps';
+const FRPS_CONFIG = './frps.toml';
+
+// Otorgar permisos de ejecución al archivo frps (solo si es local)
+if (FRPS_PATH === './frps') {
+  try {
+    execSync('chmod +x ./frps');
+    console.log('✅ Permisos otorgados al archivo frps.');
+  } catch (err) {
+    console.error('❌ Error otorgando permisos:', err.message);
+  }
 }
 
 // === 1. INICIAR SERVIDOR FRP ===
 console.log('▶ Iniciando FRP Server...');
-const frpsProcess = exec('./frps -c ./frps.toml');
+const frpsProcess = exec(`${FRPS_PATH} -c ${FRPS_CONFIG}`);
 frpsProcess.stdout?.on('data', data => process.stdout.write(data));
 frpsProcess.stderr?.on('data', data => process.stderr.write(data));
 frpsProcess.on('error', err => console.error('❌ Error iniciando FRP Server:', err));
