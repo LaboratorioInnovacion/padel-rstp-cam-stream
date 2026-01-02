@@ -54,6 +54,7 @@ jobs:
       run: |
         echo "Node version: $(node --version)"
         echo "NPM version: $(npm --version)"
+        echo "User ID: $(id -u):$(id -g)"
 
     - name: 📦 Instalar dependencias y validar
       run: |

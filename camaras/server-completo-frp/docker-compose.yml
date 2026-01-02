@@ -13,6 +13,7 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: camaras-frp-server
+    user: "1000:1000"  # Ejecutar como usuario no-root (ajusta el UID/GID de tu servidor)
     ports:
       - "3100:3100"    # API Express
       - "7000:7000"    # FRP Control Port
