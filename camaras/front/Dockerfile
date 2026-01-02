@@ -1,9 +1,18 @@
 # Dockerfile para frontend Vite + React
 FROM node:20 AS build
 WORKDIR /app
+
+# Copiar archivos de dependencias
 COPY package.json package-lock.json* ./
 RUN npm install
+
+# Copiar código fuente
 COPY . .
+
+# Configurar variable de entorno para Vite (se "quema" en el build)
+ENV VITE_API_BASE_URL=https://padel.noaservice.org
+
+# Build de producción
 RUN npm run build
 
 FROM nginx:alpine
