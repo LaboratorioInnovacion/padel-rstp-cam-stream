@@ -159,9 +159,8 @@ jobs:
       run: |
         echo "🔧 Ajustando permisos del workspace..."
         cd camaras/server-completo-frp
-        if [ -d "logs" ]; then
-          chown -R $USER logs || true
-          chmod -R u+rwx logs || true
-        fi
-        chown -R $USER:$USER . || true
-        find . -type f -exec chmod u+w {} +
+        
+        # Solo intentar cambiar permisos de archivos propios
+        find . -user $USER -type f -exec chmod u+w {} + 2>/dev/null || true
+        
+        echo "✅ Permisos ajustados"
