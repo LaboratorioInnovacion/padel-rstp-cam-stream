@@ -26,6 +26,14 @@ jobs:
     - name: 👤 Mostrar usuario del runner
       run: whoami
 
+    - name: 🧹 Limpiar directorios problemáticos
+      run: |
+        echo "🧹 Limpiando directorios con permisos de Docker..."
+        sudo rm -rf ${{ github.workspace }}/camaras/server-completo-frp/streams/ || true
+        sudo rm -rf ${{ github.workspace }}/camaras/server-completo-frp/videos/ || true
+        sudo rm -rf ${{ github.workspace }}/camaras/server-completo-frp/logs/ || true
+        echo "✅ Limpieza completada"
+
     - name: 📥 Checkout código
       uses: actions/checkout@v4
 
