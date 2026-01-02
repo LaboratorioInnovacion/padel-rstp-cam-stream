@@ -239,6 +239,10 @@ function Show-Menu {
     Write-Host "5. Listar camaras" -ForegroundColor White
     Write-Host "6. Ver URL publica del tunel" -ForegroundColor Yellow
     Write-Host "7. Detener servicios" -ForegroundColor White
+    Write-Host "" 
+    Write-Host "8. Configurar inicio automatico" -ForegroundColor Green
+    Write-Host "9. Desinstalar inicio automatico" -ForegroundColor Red
+    Write-Host "" 
     Write-Host "0. Salir" -ForegroundColor White
     Write-Host ""
 }
@@ -520,6 +524,113 @@ function Show-TunnelUrl {
     Read-Host "Presiona Enter"
 }
 
+function Install-AutoStart {
+    Write-Host ""
+    Write-Host "CONFIGURAR INICIO AUTOMATICO" -ForegroundColor Cyan
+    Write-Host "============================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $taskName = "CamarasCloudflare"
+    $scriptPath = $PSCommandPath
+    
+    # Verificar si ya existe la tarea
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    
+    if ($existingTask) {
+        Write-Host "[WARN] Ya existe una tarea de inicio automatico" -ForegroundColor Yellow
+        $overwrite = Read-Host "Deseas reemplazarla? (S/N)"
+        if ($overwrite -ne "S" -and $overwrite -ne "s") {
+            Write-Host "Cancelado" -ForegroundColor Gray
+            Read-Host "Presiona Enter"
+            return
+        }
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    
+    try {
+        # Crear accion: ejecutar el script en modo start con ventana oculta
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$scriptPath`" -Action start" `
+            -WorkingDirectory (Split-Path $scriptPath)
+        
+        # Crear trigger: al iniciar sesion del usuario
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        
+        # Configurar para que se ejecute con mayores privilegios
+        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+        
+        # Configuracion adicional
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        
+        # Registrar la tarea
+        $result = Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Inicia automaticamente el sistema de camaras con Cloudflare Tunnel" -ErrorAction Stop
+        
+        if ($result) {
+            Write-Host "[OK] Inicio automatico configurado exitosamente" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "El servicio se iniciara automaticamente cuando:" -ForegroundColor White
+            Write-Host "  - Inicies sesion en Windows" -ForegroundColor Gray
+            Write-Host "  - Reinicies el sistema" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "Puedes ver la tarea en: Programador de tareas > $taskName" -ForegroundColor Yellow
+        }
+        
+    } catch {
+        Write-Host "[ERROR] No se pudo configurar el inicio automatico" -ForegroundColor Red
+        Write-Host ""
+        
+        if ($_.Exception.Message -match "Acceso denegado|Access is denied") {
+            Write-Host "NECESITAS PERMISOS DE ADMINISTRADOR" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Soluciones:" -ForegroundColor White
+            Write-Host ""
+            Write-Host "Opcion 1 (RECOMENDADA):" -ForegroundColor Cyan
+            Write-Host "  1. Cierra este programa" -ForegroundColor Gray
+            Write-Host "  2. Haz clic derecho en: instalar-inicio-automatico.bat" -ForegroundColor Gray
+            Write-Host "  3. Selecciona: 'Ejecutar como administrador'" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "Opcion 2 (Manual):" -ForegroundColor Cyan
+            Write-Host "  1. Presiona Win+R" -ForegroundColor Gray
+            Write-Host "  2. Escribe: shell:startup" -ForegroundColor Gray
+            Write-Host "  3. Copia este archivo a esa carpeta:" -ForegroundColor Gray
+            Write-Host "     $PSScriptRoot\iniciar-cloudflared.bat" -ForegroundColor Yellow
+        } else {
+            Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    
+    Write-Host ""
+    Read-Host "Presiona Enter"
+}
+
+function Uninstall-AutoStart {
+    Write-Host ""
+    Write-Host "DESINSTALAR INICIO AUTOMATICO" -ForegroundColor Cyan
+    Write-Host "==============================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $taskName = "CamarasCloudflare"
+    
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    
+    if (-not $existingTask) {
+        Write-Host "[INFO] No hay tarea de inicio automatico configurada" -ForegroundColor Gray
+        Read-Host "Presiona Enter"
+        return
+    }
+    
+    try {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+        Write-Host "[OK] Inicio automatico desinstalado" -ForegroundColor Green
+    } catch {
+        Write-Host "[ERROR] No se pudo desinstalar" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+    Read-Host "Presiona Enter"
+}
+
 function Stop-Services {
     Write-Host ""
     Write-Host "Deteniendo servicios..." -ForegroundColor Yellow
@@ -564,6 +675,8 @@ if ($Action -eq "start") {
             "5" { List-Cameras }
             "6" { Show-TunnelUrl }
             "7" { Stop-Services }
+            "8" { Install-AutoStart }
+            "9" { Uninstall-AutoStart }
             "0" { exit }
             default { Write-Host "Opcion invalida" -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
