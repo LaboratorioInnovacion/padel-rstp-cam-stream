@@ -31,11 +31,12 @@ const MOCK_STREAMS: Stream[] = [
 ];
 
 // URL base del backend (cámbiala en producción si hace falta)
-const API_BASE = import.meta.env.VITE_API_BASE_URL 
-// || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://padel.noaservice.org';
 
 export const fetchStreams = async (): Promise<Stream[]> => {
   console.log('🔄 Fetching streams from API:', `${API_BASE}/api/streams`);
+  console.log('🔍 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('🔍 API_BASE actual:', API_BASE);
   try {
     const response = await axios.get(`${API_BASE}/api/streams`);
     return response.data.map((stream: any) => {
