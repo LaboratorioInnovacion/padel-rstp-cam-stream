@@ -243,6 +243,9 @@ function Show-Menu {
     Write-Host "8. Configurar inicio automatico" -ForegroundColor Green
     Write-Host "9. Desinstalar inicio automatico" -ForegroundColor Red
     Write-Host "" 
+    Write-Host "10. Configurar tunel Cloudflare (permanente)" -ForegroundColor Magenta
+    Write-Host "11. Ver info del tunel" -ForegroundColor Magenta
+    Write-Host "" 
     Write-Host "0. Salir" -ForegroundColor White
     Write-Host ""
 }
@@ -603,6 +606,178 @@ function Install-AutoStart {
     Read-Host "Presiona Enter"
 }
 
+function Show-TunnelInfo {
+    Write-Host ""
+    Write-Host "INFORMACION DEL TUNEL CLOUDFLARE" -ForegroundColor Cyan
+    Write-Host "=================================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    # Verificar si existe configuración
+    if (Test-Path ".\cloudflared-config.yml") {
+        Write-Host "[CONFIG] Tunel permanente configurado" -ForegroundColor Green
+        Write-Host ""
+        
+        $config = Get-Content ".\cloudflared-config.yml" -Raw
+        Write-Host "Archivo cloudflared-config.yml:" -ForegroundColor Yellow
+        Write-Host $config -ForegroundColor Gray
+        
+        Write-Host ""
+        Write-Host "Listando tuneles en tu cuenta:" -ForegroundColor Yellow
+        if (Test-Path ".\cloudflared.exe") {
+            & ".\cloudflared.exe" tunnel list
+        }
+    } else {
+        Write-Host "[WARN] No hay configuracion permanente" -ForegroundColor Yellow
+        Write-Host "El sistema usa tunel temporal (URL cambia en cada reinicio)" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Para crear un tunel permanente, ve a la opcion 10" -ForegroundColor Cyan
+    }
+    
+    Write-Host ""
+    Read-Host "Presiona Enter"
+}
+
+function Setup-CloudflareTunnel {
+    Write-Host ""
+    Write-Host "CONFIGURAR TUNEL CLOUDFLARE PERMANENTE" -ForegroundColor Cyan
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    if (-not (Test-Path ".\cloudflared.exe")) {
+        Write-Host "[ERROR] No se encuentra cloudflared.exe" -ForegroundColor Red
+        Write-Host "Descargalo desde: https://github.com/cloudflare/cloudflared/releases" -ForegroundColor Yellow
+        Write-Host ""
+        Read-Host "Presiona Enter"
+        return
+    }
+    
+    Write-Host "Esta utilidad te ayudara a configurar un tunel permanente con DNS" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Pasos que realizaremos:" -ForegroundColor Yellow
+    Write-Host "  1. Autenticar con Cloudflare" -ForegroundColor Gray
+    Write-Host "  2. Crear el tunel" -ForegroundColor Gray
+    Write-Host "  3. Configurar DNS" -ForegroundColor Gray
+    Write-Host "  4. Crear archivo de configuracion" -ForegroundColor Gray
+    Write-Host ""
+    
+    $continue = Read-Host "Continuar? (S/N)"
+    if ($continue -ne "S" -and $continue -ne "s") {
+        return
+    }
+    
+    # Paso 1: Login
+    Write-Host ""
+    Write-Host "[PASO 1/4] Autenticando con Cloudflare..." -ForegroundColor Cyan
+    Write-Host "Se abrira tu navegador. Inicia sesion y selecciona tu dominio" -ForegroundColor Yellow
+    Write-Host ""
+    Read-Host "Presiona Enter para continuar"
+    
+    & ".\cloudflared.exe" tunnel login
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Fallo la autenticacion" -ForegroundColor Red
+        Read-Host "Presiona Enter"
+        return
+    }
+    
+    Write-Host "[OK] Autenticado correctamente" -ForegroundColor Green
+    
+    # Paso 2: Crear túnel
+    Write-Host ""
+    Write-Host "[PASO 2/4] Crear tunel" -ForegroundColor Cyan
+    $tunnelName = Read-Host "Nombre del tunel (ej: camaras-windows)"
+    if (-not $tunnelName) { $tunnelName = "camaras-windows" }
+    
+    Write-Host "Creando tunel '$tunnelName'..." -ForegroundColor Gray
+    $tunnelOutput = & ".\cloudflared.exe" tunnel create $tunnelName 2>&1 | Out-String
+    Write-Host $tunnelOutput
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Fallo la creacion del tunel" -ForegroundColor Red
+        Write-Host "Verifica que el nombre no exista ya" -ForegroundColor Yellow
+        Read-Host "Presiona Enter"
+        return
+    }
+    
+    # Extraer tunnel ID
+    if ($tunnelOutput -match "([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})") {
+        $tunnelId = $matches[1]
+        Write-Host "[OK] Tunel creado con ID: $tunnelId" -ForegroundColor Green
+    } else {
+        Write-Host "[WARN] No se pudo extraer el ID automaticamente" -ForegroundColor Yellow
+        $tunnelId = Read-Host "Ingresa el Tunnel ID manualmente"
+    }
+    
+    # Paso 3: Configurar DNS
+    Write-Host ""
+    Write-Host "[PASO 3/4] Configurar DNS" -ForegroundColor Cyan
+    $domain = Read-Host "Ingresa tu dominio completo (ej: camaras.ejemplo.com)"
+    
+    if ($domain) {
+        Write-Host "Configurando DNS para $domain..." -ForegroundColor Gray
+        & ".\cloudflared.exe" tunnel route dns $tunnelName $domain
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] DNS configurado correctamente" -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] Verifica la configuracion DNS manualmente" -ForegroundColor Yellow
+        }
+    }
+    
+    # Paso 4: Crear archivo de configuración
+    Write-Host ""
+    Write-Host "[PASO 4/4] Crear archivo de configuracion" -ForegroundColor Cyan
+    
+    $userProfile = $env:USERPROFILE
+    $credentialsFile = "$userProfile\.cloudflared\$tunnelId.json"
+    
+    if (-not (Test-Path $credentialsFile)) {
+        Write-Host "[WARN] No se encuentra el archivo de credenciales" -ForegroundColor Yellow
+        Write-Host "Esperado en: $credentialsFile" -ForegroundColor Gray
+        $credentialsFile = Read-Host "Ingresa la ruta completa del archivo .json"
+    }
+    
+    $configContent = @"
+tunnel: $tunnelName
+credentials-file: $credentialsFile
+
+ingress:
+  - hostname: $domain
+    service: http://localhost:8888
+  - service: http_status:404
+"@
+    
+    $configContent | Out-File -FilePath ".\cloudflared-config.yml" -Encoding UTF8
+    
+    Write-Host "[OK] Archivo cloudflared-config.yml creado" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Contenido:" -ForegroundColor Yellow
+    Write-Host $configContent -ForegroundColor Gray
+    
+    # Probar el túnel
+    Write-Host ""
+    Write-Host "Deseas probar el tunel ahora? (S/N)" -ForegroundColor Yellow
+    $test = Read-Host
+    
+    if ($test -eq "S" -or $test -eq "s") {
+        Write-Host "Iniciando tunel de prueba..." -ForegroundColor Cyan
+        Write-Host "Presiona Ctrl+C para detener" -ForegroundColor Yellow
+        Write-Host ""
+        & ".\cloudflared.exe" tunnel --config ".\cloudflared-config.yml" run $tunnelName
+    }
+    
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "CONFIGURACION COMPLETADA" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Tu URL publica es: https://$domain" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Ahora puedes usar la opcion 1 o 2 para iniciar el sistema completo" -ForegroundColor White
+    Write-Host ""
+    Read-Host "Presiona Enter"
+}
+
 function Uninstall-AutoStart {
     Write-Host ""
     Write-Host "DESINSTALAR INICIO AUTOMATICO" -ForegroundColor Cyan
@@ -677,6 +852,8 @@ if ($Action -eq "start") {
             "7" { Stop-Services }
             "8" { Install-AutoStart }
             "9" { Uninstall-AutoStart }
+            "10" { Setup-CloudflareTunnel }
+            "11" { Show-TunnelInfo }
             "0" { exit }
             default { Write-Host "Opcion invalida" -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
