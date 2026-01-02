@@ -14,7 +14,7 @@ Esta guía te ayudará a configurar un túnel de Cloudflare para exponer tu serv
 1. Ve a [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com)
 2. Navega a **Networks** > **Tunnels**
 3. Click en **Create a tunnel**
-4. Selecciona **Cloudflared** como connector
+4. Selecciona **Cloudflared** como connector  asds
 5. Dale un nombre (ej: `camaras-server`)
 6. Click en **Save tunnel**
 
