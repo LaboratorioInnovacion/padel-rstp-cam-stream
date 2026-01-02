@@ -6,7 +6,8 @@
 
 [common]
 # Dirección del servidor FRP (tu VPS)
-serverAddr = "padel.noaservice.org"
+# Usa IP directa porque Cloudflare (padel.noaservice.org) solo soporta HTTP/HTTPS
+serverAddr = "186.12.205.69"
 serverPort = 7000
 
 # Logs del cliente (opcional)

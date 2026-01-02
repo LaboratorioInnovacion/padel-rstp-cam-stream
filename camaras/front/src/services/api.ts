@@ -38,14 +38,22 @@ export const fetchStreams = async (): Promise<Stream[]> => {
   console.log('🔄 Fetching streams from API:', `${API_BASE}/api/streams`);
   try {
     const response = await axios.get(`${API_BASE}/api/streams`);
-    return response.data.map((stream: any) => ({
-      id: stream.id,
-      url: `${API_BASE}${stream.url}`,
-      title: `Stream from ${stream.id}`,
-      isLive: true,
-      viewCount: Math.floor(Math.random() * 200) + 1,
-      thumbnail: `https://picsum.photos/seed/${stream.id}/640/360`,
-    }));
+    return response.data.map((stream: any) => {
+      // Si la URL ya es completa (https://), usarla directamente
+      // Si es relativa (/streams/...), concatenar con API_BASE
+      const streamUrl = stream.url.startsWith('http') 
+        ? stream.url 
+        : `${API_BASE}${stream.url}`;
+      
+      return {
+        id: stream.id,
+        url: streamUrl,
+        title: `Stream from ${stream.id}`,
+        isLive: true,
+        viewCount: Math.floor(Math.random() * 200) + 1,
+        thumbnail: `https://picsum.photos/seed/${stream.id}/640/360`,
+      };
+    });
   } catch (error) {
     console.error('❌ Error fetching streams, fallback to mock:', error);
     return MOCK_STREAMS;

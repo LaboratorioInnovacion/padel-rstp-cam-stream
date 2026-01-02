@@ -1,6 +1,6 @@
 {
   "serverUrl": "https://padel.noaservice.org",
-  "serverPort": 3100,
+  "serverPort": "",
   "rtspPublicHost": "padel.noaservice.org",
   "rtspPublicPort": 18554,
   "mediaRtspPort": 8554,
