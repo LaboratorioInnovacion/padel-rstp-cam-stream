@@ -441,6 +441,7 @@ export default function App() {
           onAddNew={() => setShowCameraForm(true)}
           onReconnect={handleReconnectCamera}
           reconnectStats={reconnectStats}
+          tunnelUrl={tunnelUrl}
         />
         
         {/* TODO: Agregar modales de configuración aquí */}

@@ -9,8 +9,8 @@ RUN npm install
 # Copiar código fuente
 COPY . .
 
-# Configurar variable de entorno para Vite (se "quema" en el build)
-ENV VITE_API_BASE_URL=https://padel.noaservice.org
+# Configurar variable de entorno para Vite (apunta al servidor cloudflared)
+ENV VITE_API_BASE_URL=https://tuneluno.noaservice.org
 
 # Build de producción
 RUN npm run build

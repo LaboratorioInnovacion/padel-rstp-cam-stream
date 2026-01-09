@@ -22,6 +22,7 @@ console.log('🔍 Buscando binarios en:', binDir)
 
 const camerasFile = path.join(process.cwd(), 'cameras.json')
 const configFile = path.join(process.cwd(), 'config.json')
+const mediamtxConfigFile = path.join(process.cwd(), 'mediamtx.yml')
 
 let processes = {}
 let shouldRestart = {} // Control de auto-reinicio
@@ -424,7 +425,8 @@ function saveConfig() {
       locationId,
       locationName,
       tunnelName,
-      tunnelId
+      tunnelId,
+      tunnelHostname
     }
     fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf-8')
     console.log('💾 Configuración guardada en config.json')
@@ -473,6 +475,53 @@ function saveCameras() {
   }
 }
 
+function updateMediaMTXConfig() {
+  try {
+    // Generar configuración HLS CLÁSICO (sin LL-HLS) para máxima estabilidad
+    let config = `# MediaMTX configuration - HLS CLÁSICO para estabilidad
+logLevel: warn
+
+# RTSP server
+rtspAddress: :8554
+protocols: [tcp]
+
+# HLS server - CLÁSICO (sin Low-Latency para mejor compatibilidad)
+hlsAddress: :8888
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 4s
+hlsPartDuration: 0s
+hlsAllowOrigin: '*'
+
+# WebRTC (baja latencia alternativa)
+webrtcAddress: :8189
+
+# API
+apiAddress: :9997
+
+# Paths de cámaras
+paths:
+`
+    
+    // Agregar un path por cada cámara (formato simple)
+    cameras.forEach(camera => {
+      config += `  ${camera.id}:\n`
+    })
+    
+    // Si no hay cámaras, agregar un path por defecto
+    if (cameras.length === 0) {
+      config += `  cam1:\n`
+    }
+    
+    fs.writeFileSync(mediamtxConfigFile, config, 'utf-8')
+    console.log(`📝 MediaMTX config actualizado con ${cameras.length} cámara(s) - HLS CLÁSICO`)
+    return true
+  } catch (error) {
+    console.error('Error actualizando mediamtx.yml:', error.message)
+    return false
+  }
+}
+
 function getCameras() {
   if (cameras.length === 0) {
     loadCameras()
@@ -502,6 +551,7 @@ function addCamera(camera) {
   
   cameras.push(newCamera)
   saveCameras()
+  updateMediaMTXConfig()
   console.log(`✅ Cámara agregada: ${newCamera.id}`)
   return newCamera
 }
@@ -514,6 +564,7 @@ function updateCamera(id, updates) {
   
   cameras[index] = { ...cameras[index], ...updates, id } // Mantener el ID original
   saveCameras()
+  updateMediaMTXConfig()
   console.log(`✅ Cámara actualizada: ${id}`)
   return cameras[index]
 }
@@ -540,6 +591,7 @@ function deleteCamera(id) {
   
   cameras.splice(index, 1)
   saveCameras()
+  updateMediaMTXConfig()
   console.log(`🗑️  Cámara eliminada: ${id}`)
   return true
 }
@@ -615,9 +667,9 @@ function startSingleCamera(camera) {
     ]
   } else {
     const qualityPresets = {
-      low: { resolution: '640x360', bitrate: '800k', preset: 'ultrafast', fps: 15 },
-      medium: { resolution: '1280x720', bitrate: '2000k', preset: 'veryfast', fps: 25 },
-      high: { resolution: '1920x1080', bitrate: '4000k', preset: 'fast', fps: 30 }
+      low: { resolution: '640x360', bitrate: '1000k', preset: 'fast', fps: 15, gop: 30 },
+      medium: { resolution: '1280x720', bitrate: '2500k', preset: 'medium', fps: 25, gop: 50 },
+      high: { resolution: '1920x1080', bitrate: '5000k', preset: 'medium', fps: 30, gop: 60 }
     }
     const quality = qualityPresets[camera.quality] || qualityPresets.medium
     
@@ -626,13 +678,16 @@ function startSingleCamera(camera) {
       '-i', camera.rtspUrl,
       '-vf', `scale=${quality.resolution}:force_original_aspect_ratio=decrease,fps=${quality.fps}`,
       '-c:v', 'libx264',
-      '-preset', quality.preset,
+      '-preset', quality.preset,        // 🎯 Mejor compresión = menos ancho de banda
       '-b:v', quality.bitrate,
-      '-maxrate', quality.bitrate,
-      '-bufsize', `${parseInt(quality.bitrate) * 2}k`,
-      '-g', '50',
+      '-maxrate', `${parseInt(quality.bitrate) * 1.2}k`,  // 20% margen
+      '-bufsize', `${parseInt(quality.bitrate) * 4}k`,    // 🎯 Buffer grande (4x) = streaming estable
+      '-g', quality.gop.toString(),
+      '-keyint_min', quality.gop.toString(),              // Keyframes regulares
+      '-sc_threshold', '0',
+      '-pix_fmt', 'yuv420p',            // Compatibilidad máxima
       '-c:a', 'aac',
-      '-b:a', '64k',
+      '-b:a', '128k',                   // 🎯 Audio de mejor calidad
       '-ar', '44100',
       '-f', 'rtsp',
       '-rtsp_transport', 'tcp',
@@ -753,9 +808,14 @@ function startProcess(name, args = [], options = {}, processKey = null) {
 }
 
 async function startMTX() {
-  // mediamtx sin configuración (usa valores por defecto)
+  // Actualizar configuración de MediaMTX con todas las cámaras
+  updateMediaMTXConfig()
+  
   if (processes['mediamtx']) return processes['mediamtx']
-  const proc = startProcess('mediamtx', [])
+  
+  // MediaMTX con configuración específica para estabilidad
+  const args = ['mediamtx.yml']
+  const proc = startProcess('mediamtx', args)
   if (proc) processes['mediamtx'] = proc
   return proc
 }
@@ -779,13 +839,15 @@ async function startFFmpeg() {
     
     let args
     
-    // Parámetros optimizados para RTSP (compatible con FFmpeg moderno)
+    // Parámetros optimizados para RTSP con SINCRONIZACIÓN de timestamps
     const rtspReconnectArgs = [
       '-rtsp_transport', 'tcp',           // TCP más confiable que UDP
       '-rtsp_flags', 'prefer_tcp',        // Preferir TCP
-      '-fflags', '+genpts+discardcorrupt', // Generar timestamps, descartar frames corruptos
-      '-analyzeduration', '5000000',      // Tiempo de análisis: 5 segundos
-      '-probesize', '5000000',            // Tamaño de sondeo: 5MB
+      '-fflags', '+genpts+discardcorrupt+nobuffer', // Generar timestamps, descartar corruptos
+      '-flags', 'low_delay',              // Baja latencia
+      '-use_wallclock_as_timestamps', '1', // 🎯 Usar reloj del sistema para timestamps
+      '-analyzeduration', '3000000',      // Tiempo de análisis: 3 segundos
+      '-probesize', '3000000',            // Tamaño de sondeo: 3MB
     ]
     
     // Modo COPY: Sin recodificar (bajo CPU, alto ancho de banda, calidad original)
@@ -808,25 +870,51 @@ async function startFFmpeg() {
       const qualityPresets = {
         low: {
           resolution: '640x360',
-          bitrate: '800k',
-          preset: 'ultrafast',
-          fps: 15
+          bitrate: '1000k',
+          preset: 'fast',
+          fps: 15,
+          gop: 30
         },
         medium: {
           resolution: '1280x720',
-          bitrate: '2000k',
-          preset: 'veryfast',
-          fps: 25
+          bitrate: '2500k',
+          preset: 'medium',
+          fps: 25,
+          gop: 50
         },
         high: {
           resolution: '1920x1080',
-          bitrate: '4000k',
-          preset: 'fast',
-          fps: 30
+          bitrate: '5000k',
+          preset: 'medium',
+          fps: 30,
+          gop: 60
         }
       }
       
       const quality = qualityPresets[camera.quality] || qualityPresets.medium
+      
+      // Determinar configuración de audio
+      // Si audioMode es 'disabled' o hay problemas conocidos, no incluir audio
+      const audioMode = camera.audioMode || 'transcode' // 'transcode', 'copy', 'disabled'
+      
+      let audioArgs = []
+      if (audioMode === 'disabled') {
+        audioArgs = ['-an'] // Sin audio
+        console.log(`   🔇 Audio: DESHABILITADO`)
+      } else if (audioMode === 'copy') {
+        audioArgs = ['-c:a', 'copy'] // Copiar audio sin recodificar
+        console.log(`   🔊 Audio: COPY`)
+      } else {
+        // Transcode audio con SINCRONIZACIÓN AGRESIVA
+        audioArgs = [
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-ar', '44100',
+          '-ac', '2',                     // Forzar 2 canales (estéreo)
+          '-af', 'aresample=async=1:min_hard_comp=0.100000:first_pts=0',  // 🎯 Sincronización agresiva
+        ]
+        console.log(`   🔊 Audio: TRANSCODE AAC (sync agresivo)`)
+      }
       
       args = [
         ...rtspReconnectArgs,
@@ -834,15 +922,16 @@ async function startFFmpeg() {
         // Video: recodificar y escalar
         '-vf', `scale=${quality.resolution}:force_original_aspect_ratio=decrease,fps=${quality.fps}`,
         '-c:v', 'libx264',
-        '-preset', quality.preset,
+        '-preset', quality.preset,        // 🎯 Mejor compresión
         '-b:v', quality.bitrate,
-        '-maxrate', quality.bitrate,
-        '-bufsize', `${parseInt(quality.bitrate) * 2}k`,
-        '-g', '50',
-        // Audio: recodificar a bajo bitrate
-        '-c:a', 'aac',
-        '-b:a', '64k',
-        '-ar', '44100',
+        '-maxrate', `${parseInt(quality.bitrate) * 1.2}k`,
+        '-bufsize', `${parseInt(quality.bitrate) * 4}k`,  // 🎯 Buffer grande = sin trabas
+        '-g', quality.gop.toString(),
+        '-keyint_min', quality.gop.toString(),
+        '-sc_threshold', '0',
+        '-pix_fmt', 'yuv420p',
+        // Audio según modo configurado
+        ...audioArgs,
         // Formato de salida
         '-f', 'rtsp',
         '-rtsp_transport', 'tcp',
@@ -852,6 +941,7 @@ async function startFFmpeg() {
       console.log(`▶️  Iniciando FFmpeg para ${camera.name} (${camera.id})`)
       console.log(`   Modo: RECODIFICAR`)
       console.log(`   Calidad: ${camera.quality} (${quality.resolution} @ ${quality.bitrate})`)
+      console.log(`   🎯 Optimizado para streaming estable (buffer 4x, preset ${quality.preset})`)
       console.log(`   🔄 Auto-reconexión RTSP habilitada`)
     }
     
@@ -1224,6 +1314,25 @@ function setLocationConfig(locId, locName) {
   return { locationId, locationName }
 }
 
+function setTunnelConfig(name, id, hostname) {
+  if (name) tunnelName = name
+  if (id) tunnelId = id
+  if (hostname !== undefined) tunnelHostname = hostname
+  
+  // Actualizar archivo de configuración de cloudflared
+  if (tunnelId) {
+    updateCloudflaredConfig()
+  }
+  
+  saveConfig()
+  console.log(`🔧 Configuración del túnel actualizada:`)
+  console.log(`   Nombre: ${tunnelName}`)
+  console.log(`   ID: ${tunnelId}`)
+  console.log(`   Hostname: ${tunnelHostname || '(no configurado)'}`)
+  
+  return { tunnelName, tunnelId, tunnelHostname }
+}
+
 function getLocationConfig() {
   return { locationId, locationName }
 }
@@ -1285,7 +1394,7 @@ function getServerUrl() {
 }
 
 function getTunnelConfig() {
-  return { tunnelName, tunnelId }
+  return { tunnelName, tunnelId, tunnelHostname }
 }
 
 // Cargar configuración al iniciar el módulo
@@ -1490,6 +1599,7 @@ module.exports = {
   getServerUrl,
   getTunnelUrl,
   getTunnelConfig,
+  setTunnelConfig,
   getCameras,
   addCamera,
   updateCamera,

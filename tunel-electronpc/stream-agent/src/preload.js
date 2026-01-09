@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   getServerUrl: () => ipcRenderer.invoke('get-server-url'),
   getTunnelUrl: () => ipcRenderer.invoke('get-tunnel-url'),
   getTunnelConfig: () => ipcRenderer.invoke('get-tunnel-config'),
+  setTunnelConfig: (name, id, hostname) => ipcRenderer.invoke('set-tunnel-config', name, id, hostname),
   getCameras: () => ipcRenderer.invoke('get-cameras'),
   addCamera: (camera) => ipcRenderer.invoke('add-camera', camera),
   updateCamera: (id, updates) => ipcRenderer.invoke('update-camera', id, updates),

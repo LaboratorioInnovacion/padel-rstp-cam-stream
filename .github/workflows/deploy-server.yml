@@ -1,7 +1,7 @@
 # ================================================================
-# GitHub Actions - Deploy FRP Server to VPS
+# GitHub Actions - Deploy Cloudflared Server to VPS
 # ================================================================
-name: Deploy FRP Server
+name: Deploy Cloudflared Server
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
   # Job: Build, Test & Deploy
   # ============================================================
   deploy:
-    name: Build & Deploy FRP Server
+    name: Build & Deploy Cloudflared Server
     runs-on: self-hosted
     timeout-minutes: 20
     
@@ -62,8 +62,14 @@ jobs:
         cd camaras/server-completo-frp
         npm ci
         
-        echo "🔍 Verificando sintaxis del servidor..."
-        node --check server-completo-frp.mjs
+        echo "🔍 Verificando sintaxis del servidor Cloudflared..."
+        node --check server-cloudflared.mjs
+        
+        echo "✅ Validando archivo existe..."
+        if [ ! -f server-cloudflared.mjs ]; then
+          echo "❌ server-cloudflared.mjs no encontrado"
+          exit 1
+        fi
         
         echo "✅ Tests (si existen)..."
         npm test --if-present || true
@@ -91,75 +97,105 @@ jobs:
         chmod 777 streams videos logs
         echo "✅ Directorios creados"
 
-    - name: 🏗️ Construir y desplegar aplicación
+    - name: 🏗️ Construir imagen Docker
       run: |
-        echo "🏗️ Iniciando construcción..."
+        echo "🏗️ Construyendo imagen del servidor Cloudflared..."
         cd camaras/server-completo-frp
         
-        echo "🔨 Construyendo aplicación..."
-        for attempt in 1 2 3; do
-          echo "Intento $attempt de construcción..."
-          if docker compose build --no-cache --pull; then
-            echo "✅ Construcción exitosa"
-            break
-          else
-            echo "❌ Falló intento $attempt"
-            if [ $attempt -eq 3 ]; then
-              echo "💥 Falló después de 3 intentos"
-              exit 1
-            fi
-            sleep 10
-          fi
-        done
+        echo "📝 Creando archivo cameras-cloudflared.json si no existe..."
+        if [ ! -f cameras-cloudflared.json ]; then
+          echo '[]' > cameras-cloudflared.json
+        fi
+        
+        echo "📝 Creando Dockerfile para Cloudflared..."
+        cat > Dockerfile.cloudflared << 'EOF'
+        FROM node:18-alpine
+        
+        WORKDIR /app
+        
+        COPY package*.json ./
+        RUN npm ci --only=production
+        
+        COPY server-cloudflared.mjs ./
+        COPY cameras-cloudflared.json ./
+        
+        EXPOSE 3100
+        
+        CMD ["node", "server-cloudflared.mjs"]
+        EOF
+        
+        echo "🔨 Construyendo imagen..."
+        docker build -t camaras-server-cloudflared:latest -f Dockerfile.cloudflared .
+        echo "✅ Construcción exitosa"
 
-    - name: 🚀 Levantar servicios
+    - name: 🚀 Levantar servidor Cloudflared
       run: |
-        echo "🚀 Levantando servicios..."
+        echo "🚀 Levantando servidor Cloudflared..."
         cd camaras/server-completo-frp
-        docker compose up -d
         
-        echo "⏳ Esperando que los servicios estén listos..."
+        echo "📝 Verificando archivo de configuración..."
+        if [ ! -f cameras-cloudflared.json ]; then
+          echo '[]' > cameras-cloudflared.json
+        fi
+        
+        docker stop camaras-server-cloudflared 2>/dev/null || true
+        docker rm camaras-server-cloudflared 2>/dev/null || true
+        
+        docker run -d \
+          --name camaras-server-cloudflared \
+          --restart unless-stopped \
+          -p 3100:3100 \
+          -v "$(pwd)/cameras-cloudflared.json:/app/cameras-cloudflared.json" \
+          camaras-server-cloudflared:latest
+        
+        echo "⏳ Esperando que el servidor esté listo..."
         sleep 15
 
-    - name: 🏥 Verificar salud de la aplicación
+    - name: 🏥 Verificar salud del servidor Cloudflared
       run: |
-        echo "🏥 Verificando salud de la aplicación..."
+        echo "🏥 Verificando salud del servidor..."
         
-        echo "📊 Estado de contenedores:"
-        cd camaras/server-completo-frp
-        docker compose ps
+        echo "📊 Estado del contenedor:"
+        docker ps | grep camaras-server-cloudflared || true
         
-        echo "🔍 Logs del servidor FRP:"
-        docker compose logs --tail 50 frp-server || true
+        echo "🔍 Logs del servidor:"
+        docker logs camaras-server-cloudflared --tail 50 || true
         
-        echo "🌐 Probando endpoint local (puerto 3100)..."
+        echo "🌐 Probando endpoint /api/health (puerto 3100)..."
         for i in {1..10}; do
           if curl -s -f http://localhost:3100/api/health > /dev/null; then
-            echo "✅ Aplicación responde correctamente en puerto 3100"
-            curl -s http://localhost:3100/api/health | head -20
+            echo "✅ Servidor Cloudflared responde correctamente"
+            echo "📊 Health check:"
+            curl -s http://localhost:3100/api/health | jq . 2>/dev/null || curl -s http://localhost:3100/api/health
+            echo ""
+            echo "🎥 Streams registrados:"
+            curl -s http://localhost:3100/api/streams | jq . 2>/dev/null || curl -s http://localhost:3100/api/streams
             exit 0
           fi
           echo "⏳ Intento $i/10 - Esperando..."
           sleep 5
         done
         
-        echo "⚠️ La aplicación no responde en localhost:3100"
+        echo "⚠️ El servidor no responde en localhost:3100"
+        docker logs camaras-server-cloudflared --tail 100
 
     - name: 📊 Resultado del despliegue
       if: always()
       run: |
-        echo "📊 RESUMEN DEL DESPLIEGUE"
-        echo "========================"
+        echo "📊 RESUMEN DEL DESPLIEGUE CLOUDFLARED"
+        echo "====================================="
         echo "Repositorio: ${{ github.repository }}"
         echo "Rama: ${{ github.ref_name }}"
         echo "Commit: ${{ github.sha }}"
         echo ""
-        echo "🐳 Estado de Docker:"
-        cd camaras/server-completo-frp
-        docker compose ps
+        echo "🐳 Contenedor activo:"
+        docker ps | grep camaras-server-cloudflared || echo "No encontrado"
         echo ""
-        echo "📝 Últimos logs del servidor:"
-        docker compose logs --tail 30 frp-server || true
+        echo "📝 Últimos logs:"
+        docker logs camaras-server-cloudflared --tail 30 || true
+        echo ""
+        echo "🎥 Streams disponibles:"
+        curl -s http://localhost:3100/api/streams | jq '.count,.streams[].name' 2>/dev/null || echo "No disponible"
         echo ""
         echo "✅ Deployment completado"
 

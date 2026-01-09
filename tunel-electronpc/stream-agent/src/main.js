@@ -1,7 +1,7 @@
 // src/main.js
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification } = require('electron')
 const path = require('path')
-const { startAll, stopAll, setServerConfig, getServerUrl, getTunnelUrl, getTunnelConfig, getCameras, addCamera, updateCamera, deleteCamera, reconnectCamera, setLocationConfig, getLocationConfig, getSystemStats, cloudflaredLogin, cloudflaredCreateTunnel, cloudflaredListTunnels, cloudflaredRouteDNS, changeDNSToCloudflare, getLastError, flushDNSCache, getReconnectStats, updateReconnectConfig, setEventCallback } = require('./processManager')
+const { startAll, stopAll, setServerConfig, getServerUrl, getTunnelUrl, getTunnelConfig, setTunnelConfig, getCameras, addCamera, updateCamera, deleteCamera, reconnectCamera, setLocationConfig, getLocationConfig, getSystemStats, cloudflaredLogin, cloudflaredCreateTunnel, cloudflaredListTunnels, cloudflaredRouteDNS, changeDNSToCloudflare, getLastError, flushDNSCache, getReconnectStats, updateReconnectConfig, setEventCallback } = require('./processManager')
 const fs = require('fs')
 
 let mainWindow = null
@@ -13,13 +13,20 @@ let syncInterval = null // Intervalo de sincronización
 setEventCallback((channel, data) => {
   sendToRenderer(channel, data)
   
-  // Notificaciones para eventos importantes
-  if (data.event === 'reconnecting') {
-    showNotification('🔄 Reconectando', `${data.process}: Intento ${data.attempt}/${data.maxRetries}`)
-  } else if (data.event === 'max-retries-reached') {
-    showNotification('❌ Error de Conexión', `${data.process} falló múltiples veces`)
-  } else if (data.event === 'started' && data.stats?.restarts > 0) {
-    showNotification('✅ Reconectado', `${data.process} se reconectó exitosamente`)
+  // Filtrar notificaciones: NO mostrar las de MediaMTX (se reconecta solo)
+  // Solo notificar cámaras (ffmpeg-*) y cloudflared que son más críticos
+  const isMediaMTX = data.process === 'mediamtx'
+  const isCriticalProcess = data.process?.startsWith('ffmpeg-') || data.process === 'cloudflared'
+  
+  // Notificaciones solo para procesos críticos
+  if (!isMediaMTX && isCriticalProcess) {
+    if (data.event === 'reconnecting') {
+      showNotification('🔄 Reconectando', `${data.process}: Intento ${data.attempt}/${data.maxRetries}`)
+    } else if (data.event === 'max-retries-reached') {
+      showNotification('❌ Error de Conexión', `${data.process} falló múltiples veces`)
+    } else if (data.event === 'started' && data.stats?.restarts > 0) {
+      showNotification('✅ Reconectado', `${data.process} se reconectó exitosamente`)
+    }
   }
 })
 
@@ -417,6 +424,16 @@ ipcMain.handle('get-tunnel-config', async () => {
     return { ok: true, config }
   } catch (err) {
     console.error('Error obteniendo configuración del túnel:', err)
+    return { ok: false, error: err.message }
+  }
+})
+
+ipcMain.handle('set-tunnel-config', async (event, name, id, hostname) => {
+  try {
+    const config = setTunnelConfig(name, id, hostname)
+    return { ok: true, config }
+  } catch (err) {
+    console.error('Error actualizando configuración del túnel:', err)
     return { ok: false, error: err.message }
   }
 })

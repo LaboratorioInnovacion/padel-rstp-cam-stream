@@ -2,44 +2,55 @@
 import axios from 'axios';
 import { Stream } from '../types';
 
-// Fallback en caso de error en la API
+// Configuración de axios optimizada
+const axiosInstance = axios.create({
+  timeout: 10000,  // Timeout de 10 segundos
+  headers: {
+    'Accept': 'application/json',
+  },
+});
+
+// Cache simple para streams
+let streamsCache: { data: Stream[] | null; timestamp: number } = {
+  data: null,
+  timestamp: 0,
+};
+const CACHE_DURATION = 5000; // 5 segundos de cache
+
+// Fallback en caso de error en la API - USANDO TU TÚNEL REAL
 const MOCK_STREAMS: Stream[] = [
   {
     id: "cam1",
-    url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    title: "Main Studio Camera",
+    url: "https://tuneluno.noaservice.org/cam1/index.m3u8",
+    title: "Cámara Principal",
     isLive: true,
-    viewCount: 156,
+    viewCount: 0,
     thumbnail: "https://images.pexels.com/photos/2510428/pexels-photo-2510428.jpeg",
   },
   {
     id: "cam2",
-    url: "https://test-streams.mux.dev/test_001/stream.m3u8",
-    title: "Interview Room",
+    url: "https://tuneluno.noaservice.org/cam2/index.m3u8",
+    title: "Cámara 2",
     isLive: true,
-    viewCount: 89,
-    thumbnail: "https://images.pexels.com/photos/2422290/pexels-photo-2422290.jpeg",
-  },
-  {
-    id: "cam3",
-    url: "https://test-streams.mux.dev/x36xhzz/url_8/193039199_mp4_h264_aac_hq_7.m3u8",
-    title: "Outdoor Events",
-    isLive: false,
     viewCount: 0,
-    thumbnail: "https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg",
+    thumbnail: "https://images.pexels.com/photos/2422290/pexels-photo-2422290.jpeg",
   }
 ];
 
-// URL base del backend (cámbiala en producción si hace falta)
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://padel.noaservice.org';
+// URL base del backend (servidor cloudflared en puerto 3100)
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://tuneluno.noaservice.org';
 
-export const fetchStreams = async (): Promise<Stream[]> => {
+export const fetchStreams = async (forceRefresh = false): Promise<Stream[]> => {
+  // Verificar cache
+  const now = Date.now();
+  if (!forceRefresh && streamsCache.data && (now - streamsCache.timestamp) < CACHE_DURATION) {
+    return streamsCache.data;
+  }
+
   console.log('🔄 Fetching streams from API:', `${API_BASE}/api/streams`);
-  console.log('🔍 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
-  console.log('🔍 API_BASE actual:', API_BASE);
   try {
-    const response = await axios.get(`${API_BASE}/api/streams`);
-    return response.data.map((stream: any) => {
+    const response = await axiosInstance.get(`${API_BASE}/api/streams`);
+    const streams = response.data.map((stream: any) => {
       // Si la URL ya es completa (https://), usarla directamente
       // Si es relativa (/streams/...), concatenar con API_BASE
       const streamUrl = stream.url.startsWith('http') 
@@ -55,11 +66,23 @@ export const fetchStreams = async (): Promise<Stream[]> => {
         thumbnail: `https://picsum.photos/seed/${stream.id}/640/360`,
       };
     });
+    
+    // Guardar en cache
+    streamsCache = { data: streams, timestamp: Date.now() };
+    return streams;
   } catch (error) {
     console.error('❌ Error fetching streams, fallback to mock:', error);
     return MOCK_STREAMS;
   }
 };
+
+// Limpiar cache de streams (útil cuando se sabe que hay cambios)
+export const clearStreamsCache = (): void => {
+  streamsCache = { data: null, timestamp: 0 };
+};
+
+// Obtener URL base para construir URLs de streams
+export const getApiBase = (): string => API_BASE;
 
 export const startRecording = async (streamId: string): Promise<void> => {
   // Aquí puedes llamar al backend si tienes endpoints para grabar manualmente

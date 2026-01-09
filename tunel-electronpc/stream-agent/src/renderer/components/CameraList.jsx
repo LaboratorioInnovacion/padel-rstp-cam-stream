@@ -1,11 +1,28 @@
 import React from 'react'
 
-function CameraItem({ camera, onToggle, onEdit, onDelete, onReconnect, loading, reconnectStats }) {
+function CameraItem({ camera, onToggle, onEdit, onDelete, onReconnect, loading, reconnectStats, tunnelUrl }) {
   // Obtener estado de reconexión para esta cámara
   const processKey = `ffmpeg-${camera.id}`
   const stats = reconnectStats?.processes?.[processKey]
   const isReconnecting = stats?.status === 'reconnecting'
   const hasFailed = stats?.status === 'failed'
+  
+  // Construir URL pública de la cámara
+  const publicUrl = tunnelUrl ? `${tunnelUrl}/${camera.id}/` : null
+  
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        // Mostrar feedback visual temporal
+        const button = event.target
+        const originalText = button.textContent
+        button.textContent = '✓'
+        setTimeout(() => {
+          button.textContent = originalText
+        }, 1000)
+      })
+      .catch(err => console.error('Error al copiar:', err))
+  }
   
   return (
     <div className={`p-4 bg-white border rounded-lg hover:shadow-md transition-shadow ${
@@ -32,7 +49,32 @@ function CameraItem({ camera, onToggle, onEdit, onDelete, onReconnect, loading, 
             )}
           </div>
           <div className="text-xs text-gray-600 mb-1">ID: {camera.id}</div>
-          <div className="text-xs text-gray-500 break-all">{camera.rtspUrl}</div>
+          <div className="text-xs text-gray-500 break-all mb-1">{camera.rtspUrl}</div>
+          
+          {/* URL Pública */}
+          {publicUrl && camera.enabled && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+              <div className="text-xs font-medium text-blue-800 mb-1">🌐 URL Pública:</div>
+              <div className="flex items-center gap-1">
+                <a 
+                  href={publicUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline break-all flex-1"
+                >
+                  {publicUrl}
+                </a>
+                <button
+                  onClick={() => copyToClipboard(publicUrl)}
+                  title="Copiar URL"
+                  className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 flex-shrink-0"
+                >
+                  📋
+                </button>
+              </div>
+            </div>
+          )}
+          
           {stats?.restarts > 0 && (
             <div className="text-xs text-gray-400 mt-1">
               🔄 {stats.restarts} reconexiones
@@ -96,7 +138,8 @@ export default function CameraList({
   onDelete, 
   onAddNew,
   onReconnect,
-  reconnectStats
+  reconnectStats,
+  tunnelUrl
 }) {
   return (
     <div className="mb-6">
@@ -131,6 +174,7 @@ export default function CameraList({
               onReconnect={onReconnect}
               loading={loading}
               reconnectStats={reconnectStats}
+              tunnelUrl={tunnelUrl}
             />
           ))}
         </div>

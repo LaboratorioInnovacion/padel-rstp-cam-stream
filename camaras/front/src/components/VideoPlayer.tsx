@@ -27,23 +27,74 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ stream, isRecording, onToggle
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: true,
+          lowLatencyMode: false,           // Priorizar estabilidad sobre latencia
+          maxBufferLength: 30,             // Buffer de 30 segundos para smooth playback
+          maxMaxBufferLength: 60,          // Máximo 60s de buffer
+          maxBufferSize: 60 * 1000 * 1000, // 60MB de buffer máximo
+          maxBufferHole: 1.0,              // 🎯 Mayor tolerancia de huecos (era 0.5)
+          liveSyncDurationCount: 3,        // Sincronizar con 3 segmentos de distancia
+          liveMaxLatencyDurationCount: 10, // Latencia máxima 10 segmentos
+          liveDurationInfinity: true,      // Stream infinito (live)
+          highBufferWatchdogPeriod: 2,     // Watchdog cada 2s
+          fragLoadingTimeOut: 20000,       // Timeout de fragmentos 20s
+          manifestLoadingTimeOut: 20000,   // Timeout de manifest 20s
+          levelLoadingTimeOut: 20000,      // Timeout de niveles 20s
+          startLevel: -1,                  // Auto-seleccionar calidad
+          // 🎯 Opciones para tolerar errores de audio/video
+          nudgeOffset: 0.1,                // Ajuste fino de sincronización
+          nudgeMaxRetry: 5,                // Reintentos de nudge
+          stretchShortVideoTrack: true,    // 🎯 Estirar track de video corto
+          forceKeyFrameOnDiscontinuity: true, // Forzar keyframe en discontinuidades
+          debug: false,                    // Sin debug en producción
         });
+        
         hls.loadSource(stream.url);
         hls.attachMedia(video);
+        
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           video.play()
             .then(() => setIsPlaying(true))
             .catch(error => console.error('Error playing video:', error));
         });
         
+        // Manejo de errores mejorado con recuperación automática
         hls.on(Hls.Events.ERROR, (event, data) => {
+          console.warn('HLS event:', data.type, data.details);
+          
           if (data.fatal) {
-            console.error('HLS error:', data);
-            hls?.destroy();
-            setTimeout(setupHls, 3000); // Try to reconnect after 3 seconds
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                // Error de red - intentar recuperar
+                console.log('🔄 Network error, intentando recuperar...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                // Error de media - intentar recuperar
+                console.log('🔄 Media error, intentando recuperar...');
+                hls.recoverMediaError();
+                break;
+              default:
+                // Error fatal no recuperable - reiniciar HLS
+                console.error('❌ Fatal error, reiniciando HLS en 3s...', data);
+                hls.destroy();
+                setTimeout(setupHls, 3000);
+                break;
+            }
           }
         });
+        
+        // Detectar cuando el buffer está vacío y reiniciar
+        video.addEventListener('waiting', () => {
+          console.log('⏳ Video esperando datos...');
+        });
+        
+        video.addEventListener('stalled', () => {
+          console.warn('⚠️ Video stalled, forzando recarga...');
+          if (hls) {
+            hls.startLoad();
+          }
+        });
+        
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = stream.url;
         video.addEventListener('loadedmetadata', () => {

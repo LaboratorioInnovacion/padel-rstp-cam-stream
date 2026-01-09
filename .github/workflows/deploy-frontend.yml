@@ -61,9 +61,13 @@ jobs:
         docker compose down 2>/dev/null || docker stop camaras-frontend 2>/dev/null || true
         docker rm camaras-frontend 2>/dev/null || true
 
-    - name: 🏗️ Construir aplicación
+    - name: 🏗️ Construir aplicación optimizada
       run: |
-        echo "🏗️ Construyendo frontend..."
+        echo "🏗️ Construyendo frontend con optimizaciones..."
+        echo "  - HLS.js con error recovery mejorado"
+        echo "  - Vite code splitting (vendor/hls/ui)"
+        echo "  - Terser minification + drop_console"
+        echo "  - nginx gzip compression + caching"
         cd camaras/front
         
         for attempt in 1 2 3; do
