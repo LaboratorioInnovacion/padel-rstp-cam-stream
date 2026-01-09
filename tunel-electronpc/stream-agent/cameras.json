@@ -1,0 +1,12 @@
+{
+  "cameras": [
+    {
+      "id": "cam1",
+      "name": "Cámara Principal",
+      "rtspUrl": "rtsp://asd:asd@192.168.1.240:1945",
+      "enabled": true,
+      "quality": "medium",
+      "encoding": "copy"
+    }
+  ]
+}

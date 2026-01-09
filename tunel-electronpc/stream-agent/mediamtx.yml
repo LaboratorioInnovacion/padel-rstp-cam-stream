@@ -1,0 +1,5 @@
+# MediaMTX configuration
+logLevel: info
+
+paths:
+  cam1:

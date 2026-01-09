@@ -1,0 +1,7 @@
+tunnel: 8c04466a-28f3-447d-857e-9dce8c890d1b
+credentials-file: C:\Users\lenovopc\.cloudflared\8c04466a-28f3-447d-857e-9dce8c890d1b.json
+
+ingress:
+  - hostname: tuneluno.noaservice.org
+    service: http://localhost:8888
+  - service: http_status:404

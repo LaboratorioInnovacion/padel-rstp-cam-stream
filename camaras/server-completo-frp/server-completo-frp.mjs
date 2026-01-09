@@ -52,8 +52,12 @@ function loadCamerasFromDisk() {
       const data = fs.readFileSync(CAM_FILE);
       if (data.length === 0) return;
       Object.assign(cameras, JSON.parse(data));
-      Object.entries(cameras).forEach(([camId, publicUrl]) => {
-        startStream({ camId, rtspUrl: publicUrl });
+      Object.entries(cameras).forEach(([camId, camera]) => {
+        // Manejar tanto formato antiguo (string) como nuevo (objeto)
+        const rtspUrl = typeof camera === 'string' ? camera : camera.publicUrl;
+        const locationName = typeof camera === 'object' ? camera.locationName : 'Unknown';
+        console.log(`🔄 Cargando cámara: ${camId} [${locationName}]`);
+        startStream({ camId, rtspUrl });
       });
     } catch (err) {
       console.error('❌ Error leyendo cameras.json:', err);
@@ -64,13 +68,23 @@ function loadCamerasFromDisk() {
 loadCamerasFromDisk();
 
 app.post('/api/register', (req, res) => {
-  const { camId, publicUrl } = req.body;
+  const { camId, publicUrl, locationId, locationName, localCamId, camName } = req.body;
   if (camId && publicUrl) {
     const isNewOrChanged = !cameras[camId] || cameras[camId] !== publicUrl;
-    cameras[camId] = publicUrl;
+    cameras[camId] = {
+      publicUrl,
+      locationId: locationId || 'unknown',
+      locationName: locationName || 'Unknown Location',
+      localCamId: localCamId || camId,
+      camName: camName || camId,
+      registeredAt: new Date().toISOString()
+    };
     saveCamerasToDisk();
     if (isNewOrChanged) {
-      console.log(`📡 Cámara registrada/actualizada: ${camId} -> ${publicUrl}`);
+      console.log(`📡 Cámara registrada/actualizada:`);
+      console.log(`   ID: ${camId}`);
+      console.log(`   Ubicación: ${locationName} (${locationId})`);
+      console.log(`   URL: ${publicUrl}`);
       startStream({ camId, rtspUrl: publicUrl });
     } else {
       console.log(`⚠️ Cámara ${camId} ya estaba registrada con la misma URL`);
@@ -81,14 +95,22 @@ app.post('/api/register', (req, res) => {
 });
 
 app.get('/api/streams', (req, res) => {
-  const liveStreams = Object.entries(cameras).map(([id, publicUrl]) => {
+  const liveStreams = Object.entries(cameras).map(([id, camera]) => {
+    // Manejar tanto formato antiguo (string) como nuevo (objeto)
+    const publicUrl = typeof camera === 'string' ? camera : camera.publicUrl;
+    const locationId = typeof camera === 'object' ? camera.locationId : 'unknown';
+    const locationName = typeof camera === 'object' ? camera.locationName : 'Unknown';
+    const camName = typeof camera === 'object' ? camera.camName : id;
+    
     const url = publicUrl.startsWith('rtsp://')
       ? `/streams/live/${id}/index.m3u8`
       : publicUrl;
     return {
       id,
       url,
-      title: `Stream ${id}`,
+      title: camName,
+      location: locationName,
+      locationId: locationId,
       thumbnail: `https://picsum.photos/seed/${id}/640/360`,
       isLive: true,
       viewCount: Math.floor(Math.random() * 100) + 1
@@ -99,8 +121,9 @@ app.get('/api/streams', (req, res) => {
 
 app.post('/api/record', async (req, res) => {
   const { camId, duration } = req.body;
-  const rtspUrl = cameras[camId];
-  if (!rtspUrl) return res.status(404).json({ error: 'Cámara no encontrada' });
+  const camera = cameras[camId];
+  if (!camera) return res.status(404).json({ error: 'Cámara no encontrada' });
+  const rtspUrl = typeof camera === 'string' ? camera : camera.publicUrl;
   try {
     const filePath = await recordStream({ camId, rtspUrl, duration: duration || 3600 });
     const fileName = `${camId}_${Date.now()}.mp4`;
