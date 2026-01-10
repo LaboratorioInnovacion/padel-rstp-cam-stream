@@ -1,0 +1,56 @@
+# ================================================================
+# Configuración del Cliente FRP (frpc.toml)
+# ================================================================
+# Este archivo configura el cliente FRP que se conecta al servidor
+# para crear el túnel RTSP desde Windows hacia el VPS
+
+[common]
+# Dirección del servidor FRP (tu VPS)
+# Usa IP directa porque Cloudflare (padel.noaservice.org) solo soporta HTTP/HTTPS
+serverAddr = "186.12.205.69"
+serverPort = 7000
+
+# Logs del cliente (opcional)
+log_file = "./logs/frpc.log"
+log_level = "info"
+log_max_days = 3
+
+# Autenticación (descomenta si el servidor lo requiere)
+# authentication_method = "token"
+# token = "tu_token_super_secreto_12345"
+
+# ================================================================
+# Túnel RTSP - Expone MediaMTX al servidor
+# ================================================================
+[[proxies]]
+name = "rtsp-tunnel"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8554       # Puerto local de MediaMTX
+remotePort = 18554     # Puerto público en el servidor VPS
+
+# Health check (opcional pero recomendado)
+healthCheck.type = "tcp"
+healthCheck.intervalSeconds = 10
+healthCheck.maxFailed = 3
+
+# ================================================================
+# Túneles Adicionales (opcional)
+# ================================================================
+
+# Ejemplo: Exponer API local (si tienes una)
+# [[proxies]]
+# name = "api-local"
+# type = "tcp"
+# localIP = "127.0.0.1"
+# localPort = 3000
+# remotePort = 13000
+
+# Ejemplo: Exponer servicio web
+# [[proxies]]
+# name = "web-local"
+# type = "http"
+# localIP = "127.0.0.1"
+# localPort = 8080
+# customDomains = ["tu-subdominio.tu-servidor.com"]
+

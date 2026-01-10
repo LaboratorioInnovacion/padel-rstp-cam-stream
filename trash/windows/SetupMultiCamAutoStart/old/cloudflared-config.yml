@@ -1,0 +1,16 @@
+# ===================================================================
+# Cloudflare Tunnel Configuration
+# ===================================================================
+tunnel: a185c048-7080-42f5-a516-6625e41a00c0
+credentials-file: C:\Users\lenovopc\.cloudflared\a185c048-7080-42f5-a516-6625e41a00c0.json
+
+# ===================================================================
+# Ingress Rules
+# ===================================================================
+ingress:
+  # Exponer MediaMTX HLS en subdominio
+  - hostname: camaras-windows.noaservice.org
+    service: http://localhost:8888
+  
+  # Catch-all rule (required)
+  - service: http_status:404

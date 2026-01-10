@@ -1,0 +1,25 @@
+# MediaMTX configuration - HLS CLÁSICO para estabilidad
+logLevel: warn
+
+# RTSP server
+rtspAddress: :8554
+protocols: [tcp]
+
+# HLS server - CLÁSICO (sin Low-Latency para mejor compatibilidad)
+hlsAddress: :8888
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 4s
+hlsPartDuration: 0s
+hlsAllowOrigin: '*'
+
+# WebRTC (baja latencia alternativa)
+webrtcAddress: :8189
+
+# API
+apiAddress: :9997
+
+# Paths de cámaras
+paths:
+  cam1:
+  cam2:

@@ -1,0 +1,10 @@
+[Unit]
+Description=FRP Server
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/frps -c /opt/multi-cam-frp/server/config/frps.toml
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
