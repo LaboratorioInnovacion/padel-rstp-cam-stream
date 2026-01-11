@@ -1,0 +1,18 @@
+logLevel: warn
+rtspAddress: :8554
+protocols: [tcp]
+hlsAddress: :8888
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 4s
+hlsPartDuration: 0s
+hlsAllowOrigin: '*'
+webrtcAddress: :8189
+apiAddress: :9997
+
+paths:
+  cam1:
+  cam2:
+  cam3:
+  cam4:
+  cam5:

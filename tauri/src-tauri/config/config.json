@@ -1,0 +1,8 @@
+{
+  "serverUrl": "https://padel.noaservice.org",
+  "locationId": "1",
+  "locationName": "Ubicación Principal",
+  "tunnelName": "stream-agent",
+  "tunnelId": null,
+  "tunnelHostname": null
+}

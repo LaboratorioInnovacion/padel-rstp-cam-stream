@@ -1,0 +1,30 @@
+[package]
+name = "stream-agent"
+version = "0.1.0"
+description = "Multi-camera streaming agent with headless operation"
+authors = ["Stream Agent Team"]
+edition = "2021"
+
+[lib]
+name = "stream_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1"
+thiserror = "1"
+log = "0.4"
+env_logger = "0.11"
+serde_yaml = "0.9"
+dirs = "5"
+
